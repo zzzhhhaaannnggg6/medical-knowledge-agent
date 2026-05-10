@@ -24,6 +24,9 @@
 | MQ-007 | 2026-05-10 | Build-Frontend | 前端骨架完成：`frontend/` 已提供 React + Vite、ECharts 图谱、教材解析区、整合压缩区、RAG 引用问答和模拟教师反馈；支持 mock 数据，预留 `VITE_API_BASE` + `/api/dashboard` 接口 | `10_HANDOFF.md`, `README.md` | Pending | 本地 `npm run build` 通过，`http://localhost:5173/` 可打开 |
 | MQ-008 | 2026-05-10 | Build-Backend | 后端 FastAPI 已实现 `/health`、`/api/dashboard`、demo 加载、文档解析、知识图谱、整合压缩、RAG 问答、模拟教师反馈；smoke test 已通过，验证 2 本教材生成 20 章节、123 节点、190 边、24 决策，压缩比 4.86% | `10_HANDOFF.md`, `09_TASK_TREE.md`, `README.md`, `backend/` | Pending | 端口 8000 先前占用已释放；当前 8001 可用 |
 | MQ-009 | 2026-05-10 10:14 | Docs/Report | 评分文档和技术报告草稿已补齐，已引用最新 smoke test 数据：2 本教材、20 章节、123 节点、190 边、24 决策、4.86% 压缩比；仍需回填部署链接、GitHub Public 链接、截图和公网 demo 数据策略 | `docs/`, `report/`, `README.md`, `10_HANDOFF.md`, `09_TASK_TREE.md` | Pending | 待 Root 复核并合并最终提交口径 |
+| MQ-010 | 2026-05-10 10:37 | Root | 四分支 feedback 分析完成：当前从骨架期切换到前后端合流 + 提交保底；Frontend 接 8001 API，Backend 稳 schema，Docs 回填真实数据，Deploy 走 Vercel 静态保底 | `20_IMMEDIATE_BRANCH_ROUTING.md`, `10_HANDOFF.md` | Merged | 用户仍需 `gh auth login` 和 Vercel 登录 |
+| MQ-011 | 2026-05-10 10:44 | Build-Frontend | 前端分支封版：编辑部医学评审稿风格可作为演示前端，后续不再追加视觉；只保留 API 对齐、部署验证和阻塞 bug 修复 | `10_HANDOFF.md`, `09_TASK_TREE.md`, `20_IMMEDIATE_BRANCH_ROUTING.md` | Merged | Frontend 无阻塞 |
+| MQ-012 | 2026-05-10 10:44 | Root | GitHub CLI 已登录账号 `zzzhhhaaannnggg6`；Deploy 下一步改为创建/确认 Public 仓库、推送并部署 | `04_SUBMISSION_CHECKLIST.md`, `10_HANDOFF.md`, `09_TASK_TREE.md` | Merged | Vercel CLI 未安装 |
 
 ## 快速追加模板
 

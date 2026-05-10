@@ -11,7 +11,7 @@
 
 ## GitHub 仓库
 
-- [ ] 仓库是 Public（阻塞：`gh` 尚未登录）
+- [ ] 仓库是 Public（`gh` 已登录，待创建/确认 Public 仓库）
 - [ ] README 有项目说明
 - [ ] README 有本地运行方式
 - [ ] README 有部署链接
@@ -33,6 +33,8 @@
 - 2026-05-10 10:12 CST：后端已出现且本地冒烟通过，但默认 demo 依赖本机教材路径；公网提交保底仍为前端静态 Demo。
 - 2026-05-10 10:12 CST：`gh auth status` 显示 GitHub CLI 未登录，Public repo 创建与推送需要用户授权。
 - 2026-05-10 10:18 CST：`frontend` 生产构建通过，`npm audit --audit-level=moderate` 为 0 漏洞；构建产物体积有 Vite chunk 警告，但不阻塞提交。
+- 2026-05-10 10:44 CST：`gh auth status` 已登录 GitHub 账号 `zzzhhhaaannnggg6`，下一步可创建/确认 Public 仓库并推送。
+- 2026-05-10 10:44 CST：本机未安装 Vercel CLI；Deploy 可选择 Vercel 网页导入 GitHub 仓库，或先安装/登录 Vercel CLI 后部署。
 
 ## 技术报告可选加分
 

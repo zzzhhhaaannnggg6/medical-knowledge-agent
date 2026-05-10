@@ -9,7 +9,7 @@
 状态：
 
 - [ ] 微信恢复登录
-- [ ] GitHub CLI 登录
+- [x] GitHub CLI 登录
 - [ ] ModelScope 登录
 - [x] 开赛后读取赛题
 - [ ] 建立 Public GitHub 仓库
@@ -26,7 +26,7 @@
 - [x] GitHub CLI 安装
 - [x] 飞书 CLI 安装
 - [x] 7 本教材 PDF
-- [ ] GitHub CLI 登录
+- [x] GitHub CLI 登录
 - [ ] ModelScope 登录确认
 - [ ] 飞书网页提交权限确认
 - [ ] 微信群恢复读取
@@ -79,6 +79,7 @@
 - [x] 初始化项目
 - [x] 跑通本地
 - [ ] 完成核心功能
+- [x] Build-Frontend 封版：编辑部医学评审稿风格、教师四问、图谱强化、RAG 引用、教师反馈面板完成
 - [x] Build-Backend 完成 FastAPI、解析、抽取、整合压缩、RAG、模拟教师反馈接口
 - [x] Build-Backend smoke test 通过：2 本教材、20 章节、123 节点、190 边、24 决策、压缩比 4.86%
 - [x] 后端完成基础未命中提示
