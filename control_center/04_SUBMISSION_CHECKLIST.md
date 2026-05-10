@@ -35,6 +35,7 @@
 - 2026-05-10 10:18 CST：`frontend` 生产构建通过，`npm audit --audit-level=moderate` 为 0 漏洞；构建产物体积有 Vite chunk 警告，但不阻塞提交。
 - 2026-05-10 10:44 CST：`gh auth status` 已登录 GitHub 账号 `zzzhhhaaannnggg6`，下一步可创建/确认 Public 仓库并推送。
 - 2026-05-10 10:44 CST：本机未安装 Vercel CLI；Deploy 可选择 Vercel 网页导入 GitHub 仓库，或先安装/登录 Vercel CLI 后部署。
+- 2026-05-10 11:10 CST：Deploy 原分支失效，Root 接管并切换到 GitHub Pages 救援路线；目标部署链接为 `https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/`。
 
 ## 技术报告可选加分
 

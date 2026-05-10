@@ -305,7 +305,7 @@ function useDashboardData() {
   return { data, source, loading, error, reload: loadData };
 }
 
-function ReviewerBar({ stats, onJump }) {
+function ReviewerBar({ stats, onJump, activeKey }) {
   const items = [
     {
       key: "decisions",
@@ -349,11 +349,13 @@ function ReviewerBar({ stats, onJump }) {
     <section className="reviewer-bar" aria-label="教师评审四问">
       {items.map((item) => {
         const Icon = item.icon;
+        const isActive = activeKey === item.key;
         return (
           <button
             type="button"
             key={item.key}
-            className={`reviewer-card tone-${item.tone}`}
+            className={`reviewer-card tone-${item.tone} ${isActive ? "is-active" : ""}`}
+            aria-current={isActive ? "true" : undefined}
             onClick={() => onJump(item.key)}
           >
             <span className="kicker">{item.kicker}</span>
@@ -901,9 +903,10 @@ function RagPanel({ rag, seed, onSeedConsumed }) {
       <div className="search-box">
         <Search size={17} />
         <input
+          id="rag-search-input"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="向医学知识库提问……"
+          placeholder="向医学知识库提问……（⌘/Ctrl + K 聚焦）"
           onKeyDown={(e) => e.key === "Enter" && ask()}
         />
         <button onClick={() => ask()} type="button">提问</button>
@@ -1025,6 +1028,61 @@ function App() {
   const [showTeachingPath, setShowTeachingPath] = useState(true);
   const [reviewRunning, setReviewRunning] = useState(false);
   const [ragSeed, setRagSeed] = useState(null);
+  const [activeKey, setActiveKey] = useState("decisions");
+
+  useEffect(() => {
+    const sections = [
+      { key: "decisions", id: "section-decisions" },
+      { key: "graph", id: "section-graph" },
+      { key: "compression", id: "section-compression" },
+      { key: "rag", id: "section-rag" },
+    ];
+    const entries = sections
+      .map((s) => ({ key: s.key, el: document.getElementById(s.id) }))
+      .filter((s) => s.el);
+    if (entries.length === 0) return;
+    const observer = new IntersectionObserver(
+      (obs) => {
+        // 取最大可见比例的 section 作为当前
+        const visible = obs
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        if (visible[0]) {
+          const match = entries.find((e) => e.el === visible[0].target);
+          if (match) setActiveKey(match.key);
+        }
+      },
+      { rootMargin: "-35% 0px -55% 0px", threshold: [0, 0.15, 0.4, 0.75] },
+    );
+    entries.forEach((e) => observer.observe(e.el));
+    return () => observer.disconnect();
+  }, [data]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      const tag = (e.target && e.target.tagName) || "";
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || e.target?.isContentEditable;
+      // ⌘/Ctrl + K 聚焦搜索
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const el = document.getElementById("rag-search-input");
+        if (el) {
+          document.getElementById("section-rag")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          window.setTimeout(() => el.focus(), 240);
+        }
+        return;
+      }
+      if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+      const jumpMap = { 1: "decisions", 2: "graph", 3: "compression", 4: "rag" };
+      if (jumpMap[e.key]) {
+        e.preventDefault();
+        jumpTo(jumpMap[e.key]);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     setDecisions(data.decisions);

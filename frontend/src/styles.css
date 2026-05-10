@@ -332,20 +332,24 @@ button {
 
 .reviewer-card .kicker {
   font-family: var(--font-serif);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.22em;
   color: var(--ink-mute);
   text-transform: uppercase;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--rule-soft);
 }
 
 .reviewer-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
+  gap: var(--s-2);
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--ink-soft);
+  font-family: var(--font-serif);
+  letter-spacing: 0.02em;
 }
 
 .reviewer-head svg {
@@ -410,9 +414,62 @@ button {
 }
 
 .left-rail,
-.right-rail {
+.right-rail,
+.center-rail {
   display: grid;
-  gap: var(--s-6);
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* 栏位标签：让左/中/右三栏职能一眼可读 */
+.rail-label {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--rule);
+}
+
+.rail-label span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--paper-hi);
+  background: var(--ink);
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.rail-label.center span {
+  background: var(--accent-teal-deep);
+}
+
+.rail-label div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.rail-label small {
+  font-family: var(--font-serif);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--ink-mute);
+  text-transform: uppercase;
+}
+
+.rail-label strong {
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.01em;
 }
 
 /* ============================================================
@@ -1606,18 +1663,18 @@ button {
 .quick-questions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
 }
 
 .quick-chip {
-  padding: 5px 10px;
+  padding: 6px 12px;
   color: var(--ink-soft);
   background: var(--paper-soft);
   border: 1px solid var(--rule);
   border-radius: 999px;
   font-family: var(--font-serif);
-  font-size: 11.5px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
@@ -1642,20 +1699,44 @@ button {
 /* ============================================================
  *  RESPONSIVE
  * ============================================================ */
-@media (max-width: 1280px) {
+@media (max-width: 1360px) {
   .workspace-grid {
-    grid-template-columns: minmax(290px, 360px) minmax(0, 1fr);
+    grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
+  }
+
+  .center-rail {
+    grid-column: 1 / -1;
+    order: -1;
   }
 
   .right-rail {
     grid-column: 1 / -1;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--s-5);
+    align-items: start;
+  }
+
+  .right-rail .rail-label {
+    grid-column: 1 / -1;
+  }
+
+  .right-rail .decisions-panel,
+  .right-rail .rag-panel {
+    height: 100%;
   }
 }
 
 @media (max-width: 960px) {
   .reviewer-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .right-rail {
+    grid-template-columns: 1fr;
   }
 
   .graph-grid {
@@ -1669,8 +1750,8 @@ button {
 
 @media (max-width: 720px) {
   .app {
-    width: calc(100vw - 20px);
-    padding: 10px 0 20px;
+    width: calc(100vw - 24px);
+    padding: var(--s-4) 0 var(--s-6);
   }
 
   .app-header,
@@ -1689,14 +1770,13 @@ button {
     grid-template-columns: 1fr;
   }
 
-  .workspace-grid,
-  .right-rail {
-    grid-template-columns: 1fr;
+  .panel {
+    padding: var(--s-4) var(--s-4) var(--s-4);
   }
 
   .graph-shell {
     min-height: auto;
-    padding: 12px;
+    padding: var(--s-4);
   }
 
   .graph-canvas {
@@ -1705,7 +1785,7 @@ button {
 
   .compression-stats {
     grid-template-columns: 1fr;
-    gap: 6px;
+    gap: var(--s-2);
   }
 
   .compression-stats .arrow {

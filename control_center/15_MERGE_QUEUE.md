@@ -27,6 +27,8 @@
 | MQ-010 | 2026-05-10 10:37 | Root | 四分支 feedback 分析完成：当前从骨架期切换到前后端合流 + 提交保底；Frontend 接 8001 API，Backend 稳 schema，Docs 回填真实数据，Deploy 走 Vercel 静态保底 | `20_IMMEDIATE_BRANCH_ROUTING.md`, `10_HANDOFF.md` | Merged | 用户仍需 `gh auth login` 和 Vercel 登录 |
 | MQ-011 | 2026-05-10 10:44 | Build-Frontend | 前端分支封版：编辑部医学评审稿风格可作为演示前端，后续不再追加视觉；只保留 API 对齐、部署验证和阻塞 bug 修复 | `10_HANDOFF.md`, `09_TASK_TREE.md`, `20_IMMEDIATE_BRANCH_ROUTING.md` | Merged | Frontend 无阻塞 |
 | MQ-012 | 2026-05-10 10:44 | Root | GitHub CLI 已登录账号 `zzzhhhaaannnggg6`；Deploy 下一步改为创建/确认 Public 仓库、推送并部署 | `04_SUBMISSION_CHECKLIST.md`, `10_HANDOFF.md`, `09_TASK_TREE.md` | Merged | Vercel CLI 未安装 |
+| MQ-013 | 2026-05-10 11:10 | Root | Deploy 分支失效后由 Root 接管：新增 GitHub Pages workflow、Vite Pages base 配置和 Deploy 接手提示词 | `21_DEPLOY_HANDOFF.md`, `.github/workflows/pages.yml`, `frontend/vite.config.js`, `10_HANDOFF.md` | Merged | 下一步推送并检查 Actions |
+| MQ-014 | 2026-05-10 | Build-Frontend 优化 | 前端视觉重排：报纸感→评审工作台感。引入 8pt 间距 Scale（--s-1..-s-8）、6px 卡片圆角；去掉 body 横条纹纹理；panel 内边距 16→24px，workspace/rails 间距 14→20/24px；panel-heading 升级为“§编号徽章 + Eyebrow + 中文标题 + 右侧徽章（达标/条数/引用数）”；workspace 新增三栏标签 I/II/III（资料源·压缩 / 图谱 / 决策·RAG）；窄屏断点 1280→1360，中栏 order:-1 置顶，右栏 2×1 等高布局。数据契约、功能、mock/API 双态不变。`npm run build` 通过（CSS 28.66KB gzip 5.69KB，JS 1.21MB gzip 399.52KB，与封版基线一致）。 | `10_HANDOFF.md`, `20_IMMEDIATE_BRANCH_ROUTING.md` | Pending | Root 复核视觉；API/部署阻塞仍在 Deploy 分支 |
 
 ## 快速追加模板
 
