@@ -11,7 +11,7 @@
 
 ## GitHub 仓库
 
-- [x] 仓库是 Public：`https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent`（已推送，main @ `0f51b02`）
+- [x] 仓库是 Public：`https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent`（已推送，main @ `041fe02`）
 - [ ] README 有项目说明
 - [ ] README 有本地运行方式
 - [ ] README 有部署链接
@@ -21,7 +21,7 @@
 
 ## 部署链接
 
-- [x] GitHub Pages 工作流已成功：run 25618607225 conclusion=success
+- [x] GitHub Pages 工作流已成功：run 25618607225 初版、run 25619090600 上线 MQ-019 可读性修正（字号 15.5、行高 1.75、面板导读、stagger fade-in）
 - [ ] 公网无痕验证：`https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/`（本机 github.io 被 TLS 重置，需用户在非受限网络/无痕窗口确认）
 - [x] 不是 localhost（部署链接为 github.io 子域）
 - [ ] 无需登录即可体验核心功能（待用户验证）
