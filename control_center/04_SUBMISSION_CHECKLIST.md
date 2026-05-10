@@ -11,7 +11,7 @@
 
 ## GitHub 仓库
 
-- [ ] 仓库是 Public（`gh` 已登录，待创建/确认 Public 仓库）
+- [x] 仓库是 Public：`https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent`（已推送，main @ `0f51b02`）
 - [ ] README 有项目说明
 - [ ] README 有本地运行方式
 - [ ] README 有部署链接
@@ -21,11 +21,12 @@
 
 ## 部署链接
 
-- [ ] 公网可访问（阻塞：Vercel 尚未登录/部署）
-- [ ] 不是 localhost（待公网 URL 生成后验证）
-- [ ] 无需登录即可体验核心功能
-- [ ] 移动/桌面至少一个端可正常打开
-- [ ] 模型调用失败时有可理解提示
+- [x] GitHub Pages 工作流已成功：run 25618607225 conclusion=success
+- [ ] 公网无痕验证：`https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/`（本机 github.io 被 TLS 重置，需用户在非受限网络/无痕窗口确认）
+- [x] 不是 localhost（部署链接为 github.io 子域）
+- [ ] 无需登录即可体验核心功能（待用户验证）
+- [ ] 移动/桌面至少一个端可正常打开（待用户验证）
+- [ ] 模型调用失败时有可理解提示（待用户验证）
 
 ## Deploy 分支预检记录
 
@@ -36,6 +37,7 @@
 - 2026-05-10 10:44 CST：`gh auth status` 已登录 GitHub 账号 `zzzhhhaaannnggg6`，下一步可创建/确认 Public 仓库并推送。
 - 2026-05-10 10:44 CST：本机未安装 Vercel CLI；Deploy 可选择 Vercel 网页导入 GitHub 仓库，或先安装/登录 Vercel CLI 后部署。
 - 2026-05-10 11:10 CST：Deploy 原分支失效，Root 接管并切换到 GitHub Pages 救援路线；目标部署链接为 `https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/`。
+- 2026-05-10 11:22 CST：Deploy 接手 Agent 已创建 Public 仓库 `zzzhhhaaannnggg6/medical-knowledge-agent`，main 推送至 `0f51b02`，Pages workflow run 25618607225 conclusion=success。本机对 `*.github.io` 有 TLS 重置，需要用户在非受限网络/无痕窗口验证部署链接。
 
 ## 技术报告可选加分
 
