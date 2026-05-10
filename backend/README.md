@@ -9,10 +9,10 @@ cd "/Users/li/Documents/New project 4"
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r backend/requirements.txt
-uvicorn app.main:app --reload --app-dir backend
+uvicorn app.main:app --reload --app-dir backend --port 8001
 ```
 
-Default API root: <http://127.0.0.1:8000>
+Default API root for this branch: <http://127.0.0.1:8001>
 
 ## Smoke Test
 
@@ -26,6 +26,7 @@ Default API root: <http://127.0.0.1:8000>
 - `POST /api/demo/load`
 - `POST /api/documents`
 - `GET /api/state`
+- `GET /api/dashboard`
 - `POST /api/rag/query`
 - `POST /api/feedback`
 

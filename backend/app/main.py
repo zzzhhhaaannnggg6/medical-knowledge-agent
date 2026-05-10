@@ -105,6 +105,11 @@ def get_state() -> dict[str, Any]:
     return store.load()
 
 
+@app.get("/api/dashboard")
+def get_dashboard() -> dict[str, Any]:
+    return pipeline.dashboard_state()
+
+
 @app.post("/api/rag/query")
 def query_rag(query: RagQuery) -> dict[str, Any]:
     return pipeline.answer_question(query.question, top_k=query.top_k)

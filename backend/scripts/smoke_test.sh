@@ -53,3 +53,7 @@ print({
     "feedback_events": len(result["state"]["feedback_events"]),
 })
 PY
+
+echo "== dashboard =="
+curl -sS "$BASE_URL/api/dashboard" \
+  | python3 -c 'import json,sys; d=json.load(sys.stdin); print({"textbooks":len(d["textbooks"]),"graph_nodes":len(d["graph"]["nodes"]),"graph_edges":len(d["graph"]["edges"]),"decisions":len(d["decisions"]),"rag_citations":len(d["rag"]["citations"]),"ratio":d["compression"]["ratio"]})'

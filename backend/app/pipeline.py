@@ -199,6 +199,120 @@ class KnowledgePipeline:
         self.store.save(state)
         return response
 
+    def dashboard_state(self) -> dict[str, Any]:
+        state = self.store.load()
+        if not state.get("documents") and all(path.exists() for path in DEFAULT_DEMO_PATHS):
+            state = self.load_documents([str(path) for path in DEFAULT_DEMO_PATHS], max_pages_per_document=25)
+
+        documents = state.get("documents", [])
+        chapters = state.get("chapters", [])
+        nodes = state.get("nodes", [])
+        edges = state.get("edges", [])
+        decisions = state.get("decisions", [])
+        compression = state.get("compression", {})
+        node_lookup = {node.get("id"): node for node in nodes}
+
+        textbooks = []
+        for document in documents:
+            doc_chapters = [chapter for chapter in chapters if chapter.get("document_id") == document.get("id")]
+            textbooks.append(
+                {
+                    "id": document.get("id"),
+                    "title": document.get("title"),
+                    "format": str(document.get("format", "")).upper(),
+                    "size": self._format_size(document.get("size_bytes", 0)),
+                    "status": document.get("status", "parsed"),
+                    "chapterCount": document.get("chapter_count", len(doc_chapters)),
+                    "characters": document.get("char_count", 0),
+                    "chapters": [
+                        {
+                            "title": chapter.get("title", ""),
+                            "pages": f"{chapter.get('start_page', 1)}-{chapter.get('end_page', chapter.get('start_page', 1))}",
+                            "chars": chapter.get("char_count", 0),
+                        }
+                        for chapter in doc_chapters[:4]
+                    ],
+                }
+            )
+
+        graph_nodes = [
+            {
+                "id": node.get("id"),
+                "name": node.get("name"),
+                "category": self._frontend_category(node.get("category", "")),
+                "textbook": node.get("document_title", "跨教材整合"),
+                "sourceCount": node.get("source_count", 1),
+                "chapter": node.get("chapter_title", ""),
+                "pages": str(node.get("page", "")),
+                "definition": node.get("definition", ""),
+            }
+            for node in nodes
+            if node.get("status") != "removed"
+        ]
+        visible_node_ids = {node["id"] for node in graph_nodes}
+        graph_edges = [
+            {
+                "source": edge.get("source"),
+                "target": edge.get("target"),
+                "relation": edge.get("relation"),
+            }
+            for edge in edges
+            if edge.get("source") in visible_node_ids and edge.get("target") in visible_node_ids
+        ]
+
+        dashboard_decisions = []
+        for decision in decisions[:12]:
+            affected_names = [
+                node_lookup.get(node_id, {}).get("name", node_id)
+                for node_id in decision.get("affected_node_ids", [])
+            ]
+            dashboard_decisions.append(
+                {
+                    "id": decision.get("id"),
+                    "type": decision.get("action"),
+                    "nodes": affected_names,
+                    "result": decision.get("result_name") or "整合结果",
+                    "reason": decision.get("reason", ""),
+                    "confidence": decision.get("confidence", 0),
+                    "status": decision.get("status", "active"),
+                }
+            )
+
+        rag = self.answer_question("什么是细胞和感染？", top_k=2) if documents else self._not_found("什么是细胞和感染？")
+        return {
+            "textbooks": textbooks,
+            "graph": {
+                "nodes": graph_nodes,
+                "edges": graph_edges,
+            },
+            "compression": {
+                "originalChars": compression.get("original_char_count", 0),
+                "integratedChars": compression.get("integrated_char_count", 0),
+                "ratio": compression.get("compression_percent", 0),
+                "target": 30,
+                "guardrails": [
+                    "保留跨教材重复出现的基础概念，避免压缩后知识链断裂",
+                    "同名或近义知识点合并，互补内容保留为关键解释块",
+                    "删除项必须保留决策理由、置信度和来源教材，便于教师反馈回滚",
+                ],
+            },
+            "decisions": dashboard_decisions,
+            "rag": {
+                "question": rag.get("question", "什么是细胞和感染？"),
+                "answer": rag.get("answer", ""),
+                "citations": [
+                    {
+                        "textbook": item.get("document_title", ""),
+                        "chapter": item.get("chapter_title", ""),
+                        "pages": str(item.get("page", "")),
+                        "relevance": item.get("relevance", 0),
+                        "excerpt": item.get("snippet", ""),
+                    }
+                    for item in rag.get("citations", [])
+                ],
+            },
+        }
+
     def apply_feedback(self, feedback: FeedbackRequest) -> dict[str, Any]:
         state = self.store.load()
         decisions = state.get("decisions", [])
@@ -708,6 +822,23 @@ class KnowledgePipeline:
     def _normalize(self, name: str) -> str:
         cleaned = re.sub(r"\s+", "", name)
         return SYNONYMS.get(cleaned, cleaned)
+
+    def _frontend_category(self, category: str) -> str:
+        if "机制" in category or "调节" in category:
+            return "机制"
+        if "病理" in category or "疾病" in category:
+            return "病理过程"
+        if category == "chapter":
+            return "整合节点"
+        return "概念"
+
+    def _format_size(self, size_bytes: int) -> str:
+        if size_bytes <= 0:
+            return "0 KB"
+        size_mb = size_bytes / (1024 * 1024)
+        if size_mb >= 1:
+            return f"{size_mb:.1f} MB"
+        return f"{size_bytes / 1024:.1f} KB"
 
     def _source_ref(self, chapter: dict[str, Any]) -> dict[str, Any]:
         return {

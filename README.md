@@ -6,7 +6,7 @@ May 10 ZJU AI full-stack hackathon project. The current deliverable is a Vite/Re
 
 - Frontend: React + Vite + ECharts graph
 - Demo data: built in, so the deployed page remains usable without a backend
-- API mode: set `VITE_API_BASE` after Build unifies frontend `/api/dashboard` with backend `/api/state`
+- API mode: set `VITE_API_BASE` to a FastAPI service that exposes `/api/dashboard`
 - Deployment target: Vercel static frontend
 - Backend status: local FastAPI service is present and smoke-tested, but it is not yet required for public deployment
 
