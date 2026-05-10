@@ -30,6 +30,28 @@ Default API root for this branch: <http://127.0.0.1:8001>
 - `POST /api/rag/query`
 - `POST /api/feedback`
 
+## Frontend Contract
+
+The only frontend-facing contract to keep stable is `GET /api/dashboard`.
+It must return:
+
+- `textbooks[]`: `id`, `title`, `format`, `size`, `status`, `chapterCount`, `characters`, `chapters[]`
+- `textbooks[].chapters[]`: `title`, `pages`, `chars`
+- `graph.nodes[]`: `id`, `name`, `category`, `textbook`, `sourceCount`, `chapter`, `pages`, `definition`
+- `graph.edges[]`: `source`, `target`, `relation`
+- `compression`: `originalChars`, `integratedChars`, `ratio`, `target`, `guardrails[]`
+- `decisions[]`: `id`, `type`, `nodes[]`, `result`, `reason`, `confidence`, `status`
+- `rag`: `question`, `answer`, `citations[]`
+- `rag.citations[]`: `textbook`, `chapter`, `pages`, `relevance`, `excerpt`
+
+Do not add backend features during final integration. Only fix this response shape if the frontend cannot read it.
+
+## Public Deployment Note
+
 `/api/demo/load` reads the two smallest demo textbooks from
 `/Users/li/Desktop/黑客松/textbooks` by default and only parses an MVP-sized page
 window. Textbook PDFs are local inputs and must not be committed.
+
+Because the demo backend still depends on that local textbook path, do not make
+the backend a public-submission dependency yet. The submission fallback remains
+the static frontend Demo deployment.

@@ -6,9 +6,20 @@ May 10 ZJU AI full-stack hackathon project. The current deliverable is a Vite/Re
 
 - Frontend: React + Vite + ECharts graph
 - Demo data: built in, so the deployed page remains usable without a backend
-- API mode: set `VITE_API_BASE` to a FastAPI service that exposes `/api/dashboard`
-- Deployment target: Vercel static frontend
+- API mode: set `VITE_API_BASE` to a FastAPI service that exposes the stable `/api/dashboard` contract
+- Deployment target: GitHub Pages static frontend
 - Backend status: local FastAPI service is present and smoke-tested, but it is not yet required for public deployment
+- Public repository: <https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent>
+- Public demo: <https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/>
+
+## Main Features
+
+- Teacher review flow: answers the four review questions, "why merge", "where is the source", "is compression <=30%", and "does QA cite evidence".
+- Knowledge graph: ECharts graph with concepts, source metadata, node details, category filters, and teaching-path highlights.
+- Integration audit: shows `merge / keep / remove` decisions, reasons, confidence, and simulated feedback changes.
+- Compression audit: records original text size, retained text size, compression ratio, and the 30% threshold.
+- Citation QA: RAG-style answer panel returns textbook, chapter, page, relevance, and source excerpt.
+- Local backend loop: FastAPI can reproduce parsing, graph construction, integration, compression, QA, and simulated feedback from local textbook PDFs.
 
 ## Report Docs
 
@@ -32,18 +43,18 @@ Open the Vite URL printed by the terminal, usually `http://localhost:5173`.
 
 ## Local Backend
 
-The backend is useful for local validation and future API integration. It reads local textbook PDFs from `/Users/li/Desktop/黑客松/textbooks`; those PDFs are not committed.
+The backend is useful for local validation and API alignment. It reads local textbook PDFs from `/Users/li/Desktop/黑客松/textbooks`; those PDFs are not committed. Until the backend has public-safe demo data that does not depend on that local path, the static frontend Demo remains the submission fallback.
 
 ```bash
 cd "/Users/li/Documents/New project 4"
 source .venv/bin/activate
-uvicorn app.main:app --reload --app-dir backend
+uvicorn app.main:app --reload --app-dir backend --host 127.0.0.1 --port 8001
 ```
 
 Smoke test:
 
 ```bash
-./backend/scripts/smoke_test.sh
+BASE_URL=http://127.0.0.1:8001 ./backend/scripts/smoke_test.sh
 ```
 
 ## Production Build
@@ -57,15 +68,23 @@ npm run preview
 
 ## Deploy
 
-Default deployment is Vercel from the repository root. The root `vercel.json` runs the frontend build and publishes `frontend/dist`.
+Default public deployment is GitHub Pages. The Pages workflow builds `frontend/` and publishes the static frontend from `frontend/dist`.
 
 Required public links before Feishu submission:
 
-- GitHub repository: pending GitHub login and Public repo creation
-- Deployment URL: pending Vercel deployment
-- Technical report: local draft at `report/技术报告草稿.md`; public Feishu link pending
+- GitHub repository: <https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent>
+- Deployment URL: <https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/>
+- Technical report: local draft at `report/技术报告草稿.md`; public Feishu link is optional and should only be added if Root creates an accessible Feishu document
 
-If the backend is unavailable, the frontend falls back to the built-in demo data and shows an understandable API warning instead of a blank page. For this submission, the safest public deployment path is the static frontend first; deploy the backend only after its public demo data path no longer depends on local PDFs.
+If the backend is unavailable, the frontend falls back to the built-in demo data and shows an understandable API warning instead of a blank page. For this submission, the public link is a static demo of the core workflow; the real parsing, RAG, compression audit, and simulated feedback loop can be reproduced locally through the FastAPI backend.
+
+## Known Limits
+
+- The public GitHub Pages link is a static demo, not a public backend deployment.
+- The smoke test covers 2 textbook page windows, not the full 7-book corpus.
+- Current RAG uses keyword/rule retrieval; it is not an embedding/vector-database pipeline.
+- Teacher feedback is simulated feedback for one integration decision, not a real teacher multi-turn conversation.
+- Some PDF excerpts still contain table-of-contents or header noise and need further cleaning.
 
 ## Submission Safety
 

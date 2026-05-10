@@ -27,7 +27,10 @@
 | 2026-05-10 | Analysis | 输出阶段划分与任务分化建议 | 用户要求在完成分析后帮助总控台进行阶段划分和任务分化 | 新增 `18_PHASE_TASK_BREAKDOWN.md`，供 Root 总控台派工参考 | Active |
 | 2026-05-10 | Root | 正式采纳 09:00-14:00 五阶段执行表 | 用户要求按建议时间分配进行阶段与任务分化并落盘 | `18_PHASE_TASK_BREAKDOWN.md` 升级为 Root 执行板；后续按骨架、P0、文档、部署、复核推进 | Active |
 | 2026-05-10 | Root | 允许多 Agent / 多电脑并行分派 | 用户明确授权可以尽情分化分派任务 | 固定 Root、Build-Frontend、Build-Backend、Docs/Report、Deploy、Review、WeChat 执行单元，并要求回写交接 | Active |
-| 2026-05-10 10:12 | Deploy | 部署路线暂定为 Vercel 静态前端，后端不作为公网提交硬依赖 | 当前仓库已有 `frontend/` Vite/React 项目；`backend/` 本地冒烟通过但默认 demo 依赖本机教材路径 | 先保证公网页面可打开；后端 API 后续部署安全后再接入 `VITE_API_BASE` | Active |
+| 2026-05-10 10:12 | Deploy | 部署路线暂定为 Vercel 静态前端，后端不作为公网提交硬依赖 | 当前仓库已有 `frontend/` Vite/React 项目；`backend/` 本地冒烟通过但默认 demo 依赖本机教材路径 | 已被 11:10 GitHub Pages 救援路线替代 | Superseded |
+| 2026-05-10 11:10 | Deploy | 部署路线切换为 GitHub Pages 静态前端 | 本机未安装 Vercel CLI，GitHub Pages 可直接用 Actions 发布 `frontend/dist` | 公网提交链接采用 GitHub Pages；本地 FastAPI 后端只作为真实闭环复现 | Active |
+| 2026-05-10 11:36 | Root | 自审结论：当前不是完美达标，提交口径改为“公网静态 Demo + 本地后端真实 MVP 闭环” | 赛题要求真实上传、图谱、跨教材整合、30% 压缩、RAG 引用、Agent 架构和教师多轮反馈；当前公网未覆盖全部真实交互 | 停止扩展大功能，优先回填链接、修文档诚实边界、补 Agent 创新点和提交复核 | Active |
+| 2026-05-10 13:02 | Docs/Report | 文档提交口径收束为 GitHub Pages 静态 Demo + 本地 FastAPI 真实闭环 | 仓库、Pages、backend smoke test 均已有可验证证据，但公网后端和向量化 RAG 未完成 | README、Agent 架构说明、整合报告、技术报告草稿、提交清单统一链接和边界说明；技术报告飞书链接保持可选 | Active |
 
 ## 待决策
 

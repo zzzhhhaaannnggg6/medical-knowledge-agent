@@ -12,9 +12,9 @@
 - [x] GitHub CLI 登录
 - [ ] ModelScope 登录
 - [x] 开赛后读取赛题
-- [ ] 建立 Public GitHub 仓库
-- [ ] 完成 MVP
-- [ ] 部署公网链接
+- [x] 建立 Public GitHub 仓库
+- [x] 完成 MVP
+- [x] 部署公网链接
 - [ ] 提交飞书表单
 
 ## A：赛前环境 / 账号 / 资料
@@ -59,7 +59,7 @@
 - [x] 选择建议技术栈：React + FastAPI + ECharts Graph + JSON/SQLite
 - [x] 确定建议数据流：上传教材 → 章节解析 → 知识抽取 → 单本图谱 → 跨教材整合 → RAG → 教师反馈 → 报告
 - [x] 确定建议模型调用方式：已有 API 优先，Embedding/关键词检索兜底
-- [ ] 确定部署方式
+- [x] 确定部署方式：GitHub Pages 静态 Demo + 本地 FastAPI 后端复现真实闭环
 - [x] 写入 `06_MVP_DECISION_BOARD.md`
 - [x] 输出阶段划分与任务分化建议
 
@@ -78,27 +78,33 @@
 
 - [x] 初始化项目
 - [x] 跑通本地
-- [ ] 完成核心功能
+- [x] 完成核心功能演示闭环
 - [x] Build-Frontend 封版：编辑部医学评审稿风格、教师四问、图谱强化、RAG 引用、教师反馈面板完成
 - [x] Build-Backend 完成 FastAPI、解析、抽取、整合压缩、RAG、模拟教师反馈接口
 - [x] Build-Backend smoke test 通过：2 本教材、20 章节、123 节点、190 边、24 决策、压缩比 4.86%
 - [x] 后端完成基础未命中提示
 - [ ] 前端接入真实后端 API
+- [ ] 前端暴露真实上传入口
 - [ ] 完成错误提示
 - [x] 完成 README 交付草稿
 - [ ] 根据第 2 小时 AI 评审建议修正
+- [x] Root 完成自我筛查：4 种以上功能演示达标，但公网真实闭环不完美
 
 ## F：部署 / 提交 / 技术报告
 
-- [ ] GitHub 仓库 Public
-- [ ] 公网部署链接可访问
+- [x] GitHub 仓库 Public
+- [x] 公网部署链接可访问（curl HTTP 200，仍建议用户无痕浏览器确认页面交互）
 - [ ] 技术报告飞书文档可访问
 - [x] 完成提交 URL 指南
 - [x] 补齐 `.gitignore` 安全边界
-- [x] 确认前端可按 Vercel 静态项目部署
+- [x] 确认前端可按 GitHub Pages 静态项目部署
 - [x] Docs/Report 初稿：Agent 架构说明、需求分析、系统设计、整合报告、技术报告草稿
 - [x] 后端 smoke test 写入报告：2 本教材、20 章节、123 节点、190 边、24 决策、4.86% 压缩比
-- [ ] 回填公网部署链接、GitHub Public 链接和最终截图
+- [x] Docs/Report 写入前端“教师四问”并预留 GitHub/部署/截图占位
+- [x] 回填公网部署链接、GitHub Public 链接
+- [x] 修正 README / 报告中过时 Vercel 和占位链接表述
+- [x] Agent 架构说明补创新点、取舍和静态 Demo 降级策略
+- [ ] 最终截图
 - [ ] 飞书表单填写
 - [ ] 最终提交复核
 
