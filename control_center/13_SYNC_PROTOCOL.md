@@ -9,6 +9,13 @@ cd "/Users/li/Documents/New project 4"
 ./hackctl.sh reentry
 ```
 
+如果多个黑客松分支连续出现 429 / Too Many Requests，进入降载恢复模式：
+
+- 暂停并行打开旧分支，优先只保留 Root 或当前最关键分支。
+- 新分支只读 `10_HANDOFF.md`、`09_TASK_TREE.md`、`22_SELF_AUDIT_AND_GAP_ANALYSIS.md` 和自己对应的 handoff 文件。
+- 不要把 `./hackctl.sh dispatch` 输出的整段多 Agent 提示词反复粘进同一对话。
+- 每轮只提交一个明确动作，例如“修 README 链接”“跑一次 build”“回填报告 URL”，避免把全量控制台历史重新带入模型上下文。
+
 如果用户是 Agent 小白或需要快速读题拆解，再使用：
 
 ```bash

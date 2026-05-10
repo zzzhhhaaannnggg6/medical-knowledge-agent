@@ -148,6 +148,45 @@ dispatch_plan() {
   sed -n '1,320p' "$ROOT/control_center/19_MULTI_AGENT_DISPATCH.md"
 }
 
+backend_restart() {
+  sed -n '1,260p' "$ROOT/control_center/23_BACKEND_RESTART_HANDOFF.md"
+}
+
+root_restart() {
+  print_title "Root Restart"
+  sed -n '1,260p' "$ROOT/control_center/24_ROOT_RESTART_HANDOFF.md"
+
+  print_title "Current Handoff"
+  sed -n '1,220p' "$ROOT/control_center/10_HANDOFF.md"
+
+  print_title "Submission Checklist"
+  sed -n '1,180p' "$ROOT/control_center/04_SUBMISSION_CHECKLIST.md"
+}
+
+docs_restart() {
+  sed -n '1,280p' "$ROOT/control_center/26_DOCS_RESTART_HANDOFF.md"
+}
+
+ai_review_fix() {
+  sed -n '1,360p' "$ROOT/control_center/27_AI_REVIEW_FIX_DISPATCH.md"
+}
+
+stability_lock() {
+  sed -n '1,260p' "$ROOT/control_center/28_FINAL_SPRINT_STABILITY_LOCK.md"
+}
+
+migration_handoff() {
+  print_title "Big Branch Migration"
+  sed -n '1,320p' "$ROOT/control_center/25_BIG_BRANCH_MIGRATION_HANDOFF.md"
+
+  print_title "Current Git State"
+  git -C "$ROOT" status --short || true
+  git -C "$ROOT" log -1 --oneline || true
+
+  print_title "Submission Checklist"
+  sed -n '1,200p' "$ROOT/control_center/04_SUBMISSION_CHECKLIST.md"
+}
+
 live() {
   print_title "Live Command Desk"
   TZ=Asia/Shanghai date "+%Y-%m-%d %H:%M:%S %Z"
@@ -222,10 +261,16 @@ case "${1:-status}" in
 	  merge-queue) merge_queue ;;
 	  phase|phases) phase_plan ;;
 	  dispatch) dispatch_plan ;;
+	  backend-restart) backend_restart ;;
+	  root-restart) root_restart ;;
+	  docs-restart) docs_restart ;;
+	  ai-review|ai-review-fix) ai_review_fix ;;
+	  lock|stability|final-lock) stability_lock ;;
+	  migration) migration_handoff ;;
 	  reentry) reentry ;;
 	  handoff) sed -n '1,260p' "$ROOT/control_center/10_HANDOFF.md" ;;
 	  *)
-	    echo "Usage: ./hackctl.sh [status|links|open|submit-fields|submit-guide|agent|sync|live|tree|decisions|branches|protocol|sources|merge-queue|phase|phases|dispatch|reentry|handoff]"
+	    echo "Usage: ./hackctl.sh [status|links|open|submit-fields|submit-guide|agent|sync|live|tree|decisions|branches|protocol|sources|merge-queue|phase|phases|dispatch|backend-restart|root-restart|docs-restart|ai-review|lock|migration|reentry|handoff]"
     exit 1
     ;;
 esac

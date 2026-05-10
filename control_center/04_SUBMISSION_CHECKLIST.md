@@ -53,9 +53,12 @@
 
 - [x] 群通知已登记：私聊组织者发送姓名、GitHub 仓库链接、邮箱
 - [x] 初审前 GitHub 快照已推送：`d649ac2`
-- [ ] 用户已私聊发送姓名、仓库链接、邮箱
-- [ ] 收到邮箱评审报告
-- [ ] 根据 Top 5 建议选择高收益项修正
+- [x] 用户已收到邮箱评审报告：当前 `56.5/100`
+- [x] 根据 Top 5 建议选择高收益项修正：已拆成 `./hackctl.sh ai-review` 分支调度
+- [x] Deploy-Docker 分支完成 Docker/Compose 与 README Quick Start（本机无 Docker CLI；Review-QA 已确认 `.env.example` / `docker-compose.yml` / `pipeline.py` 三处教材路径耦合正确，Docker Desktop 集成验证为非阻塞 WARN）
+- [x] Docs-Prompt 分支完成 prompts.md、决策对照表和 RAG Pipeline 详解
+- [x] Backend-RAG 分支完成低风险混合检索增强并通过 smoke test（Root 复跑 8001 smoke test 通过）
+- [x] Review-QA 分支完成整改验收；smoke WARN 已关，Review-QA 现场通过 `health`、`demo load`、RAG、feedback、dashboard contract；安全检查 PASS，`backend/data` 不入库
 
 ## 最后 10 分钟
 

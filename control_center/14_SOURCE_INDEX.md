@@ -22,6 +22,7 @@
 | SRC-005 | 第一届 AI 全栈黑客松赛题 PDF | S3 | `/Users/li/Library/Containers/com.tencent.xinWeChat/Data/Documents/xwechat_files/wxid_z8la78j1vn7s22_7e36/temp/RWTemp/2026-05/172d4646cd212c4a144d2b0b2b53c5f0/第一届AI全栈黑客松赛题.pdf` | Yes | 20 页正式赛题：医学教材知识整合智能体，P0/P1/P2、提交物、评分体系已解析 | Active |
 | SRC-006 | 现场赛题投屏照片 | S3 | `/Users/li/Desktop/黑客松/微信图片_20260510091709_425_47.jpg` 等 4 张 | Yes | 与 PDF 核心命题一致：多教材、单图谱、跨教材去重、30% 精华、教师循环 | Active |
 | SRC-007 | 赛方 7 本医学教材 | S3 | `/Users/li/Desktop/黑客松/textbooks` | Yes | 7 本 PDF 存在，约 824MB；旧路径 `/Users/li/Desktop/textbooks` 已过时 | Active |
+| SRC-008 | 中期 AI 评审建议服务群通知 | S1 | 微信群 `浙大AI全栈极速黑客松！` 用户转述原文 | Partial | 私聊组织者发送姓名、GitHub 仓库链接、邮箱；约 10 分钟返回报告；服务开放至 14:30；每人限一次 | Active |
 
 ## 新来源登记模板
 

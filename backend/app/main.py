@@ -105,6 +105,19 @@ def get_state() -> dict[str, Any]:
     return store.load()
 
 
+@app.get("/api/textbooks")
+def list_textbooks() -> dict[str, Any]:
+    return {"textbooks": pipeline.list_textbooks()}
+
+
+@app.get("/api/textbooks/{textbook_id}/graph")
+def get_textbook_graph(textbook_id: str) -> dict[str, Any]:
+    try:
+        return pipeline.textbook_graph(textbook_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
 @app.get("/api/dashboard")
 def get_dashboard() -> dict[str, Any]:
     return pipeline.dashboard_state()

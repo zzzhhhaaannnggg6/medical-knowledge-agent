@@ -50,6 +50,39 @@
 回流：完成后更新 10_HANDOFF.md 或把结论写入 15_MERGE_QUEUE.md。
 ```
 
+## Build-Backend 重开
+
+```text
+分支身份：Build-Backend 重开分支。
+原 Build-Backend 分支已经失效，不要依赖旧对话上下文。
+请先运行或读取：
+./hackctl.sh backend-restart
+
+目标：只保证后端本地 API 可复现、/api/dashboard contract 稳定、smoke test 通过。
+优先级：
+1. 在 8001 启动 FastAPI；若占用则换 8002。
+2. 运行 BASE_URL=http://127.0.0.1:8001 ./backend/scripts/smoke_test.sh。
+3. 若失败，只修阻塞性 bug。
+4. 不部署公网后端，不处理 7 本全量，不接入向量库/embedding 大改。
+5. 把状态回写 15_MERGE_QUEUE.md 或 10_HANDOFF.md。
+```
+
+## Root 自我重开
+
+```text
+分支身份：Root 总控台重开对话。
+当前 Root 如果失效，请新对话第一步运行或读取：
+./hackctl.sh root-restart
+
+目标：接回比赛主线，继续提交闭环、分支合并和风险收束。
+优先级：
+1. 恢复 10_HANDOFF、04_SUBMISSION_CHECKLIST、22_SELF_AUDIT、15_MERGE_QUEUE。
+2. 不丢弃工作树未提交改动。
+3. 先验证 GitHub Pages 链接和回填 README/报告。
+4. 统一提交口径为“公网静态 Demo + 本地后端真实 MVP 闭环”。
+5. 只修提交阻塞，不追大功能。
+```
+
 ## Docs/Report
 
 ```text
@@ -64,6 +97,23 @@
 必须解释：知识点粒度、重复判定、30% 压缩公式、教学完整性、RAG 引用、模拟教师反馈。
 禁止：不要写无法验证的夸张描述；不要假装有真实教师反馈。
 回流：完成后更新 10_HANDOFF.md 或把结论写入 15_MERGE_QUEUE.md。
+```
+
+## Docs/Report 重开
+
+```text
+分支身份：Docs/Report 重开分支。
+原 Docs/Report 分支已经失效，不要依赖旧对话上下文。
+请先运行或读取：
+./hackctl.sh docs-restart
+
+目标：只做文档收尾、链接回填、诚实口径一致性和提交材料检查。
+优先级：
+1. README、docs/Agent 架构说明.md、report/整合报告.md、report/技术报告草稿.md。
+2. 统一口径：公网 GitHub Pages 静态 Demo + 本地 FastAPI 后端真实 MVP 闭环。
+3. 检查 GitHub 仓库、部署链接、commit hash、已知限制。
+4. 不改前端、后端、部署 workflow。
+5. 完成后把状态回写 15_MERGE_QUEUE.md 或 10_HANDOFF.md。
 ```
 
 ## Deploy
@@ -91,6 +141,25 @@
 2. 优先修提交阻塞、README 可复现、RAG 引用、压缩比、图谱可视化、教师反馈。
 3. 不做低收益大改，不重构。
 回流：把建议、采用项、放弃项写入 15_MERGE_QUEUE.md，Root 决定合并。
+```
+
+## AI 初审整改分支
+
+```text
+分支身份：AI 初审整改分支。
+项目根目录：/Users/li/Documents/New project 4。
+
+请先运行或读取：
+./hackctl.sh ai-review
+
+然后按 Root 指定的子分支身份工作：
+- Deploy-Docker：只补 Docker / Compose / README Quick Start。
+- Docs-Prompt：只补 prompts.md、架构决策对照表、RAG Pipeline 说明。
+- Backend-RAG：只做低风险混合检索增强，必须保持 smoke test 通过。
+- Frontend-Sankey：只有 Root 开启时才做决策桑基图。
+- Review-QA：逐项验收，不主动改代码。
+
+禁止：不要在一个对话里同时改 Docker、后端、前端和文档；不要重写 pipeline；不要虚构已接入真实 LLM、公网后端或 7 本全量结果。
 ```
 
 ## WeChat

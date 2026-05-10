@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 import uuid
 from collections import Counter, defaultdict
@@ -10,10 +11,11 @@ from typing import Any
 
 from pypdf import PdfReader
 
+from .llm_extractor import RELATION_TYPES, extract_chapter, llm_configured
 from .models import FeedbackRequest
 from .storage import JsonStateStore
 
-TEXTBOOK_DIR = Path("/Users/li/Desktop/黑客松/textbooks")
+TEXTBOOK_DIR = Path(os.environ.get("TEXTBOOK_DIR", "/Users/li/Desktop/黑客松/textbooks")).expanduser()
 DEFAULT_DEMO_PATHS = [
     TEXTBOOK_DIR / "03_生理学.pdf",
     TEXTBOOK_DIR / "04_医学微生物学.pdf",
@@ -38,6 +40,11 @@ STOP_TERMS = {
 KEYWORD_CATALOG: dict[str, list[tuple[str, str]]] = {
     "common": [
         ("细胞", "基础概念"),
+        ("白细胞", "免疫概念"),
+        ("白 blood 细胞", "免疫概念"),
+        ("白血球", "免疫概念"),
+        ("leukocyte", "免疫概念"),
+        ("white blood cell", "免疫概念"),
         ("组织", "基础概念"),
         ("稳态", "生理机制"),
         ("调节", "生理机制"),
@@ -77,13 +84,27 @@ SYNONYMS = {
     "稳态": "稳态",
     "细胞": "细胞",
     "细胞膜": "细胞",
+    "白细胞": "白细胞",
+    "白血球": "白细胞",
+    "白blood细胞": "白细胞",
+    "leukocyte": "白细胞",
+    "leukocytes": "白细胞",
+    "whitebloodcell": "白细胞",
+    "whitebloodcells": "白细胞",
+    "wbc": "白细胞",
     "病原菌": "细菌",
     "细菌": "细菌",
+    "炎症反应": "炎症",
+    "inflammation": "炎症",
     "免疫应答": "免疫",
     "免疫": "免疫",
+    "immuneresponse": "免疫",
     "感染性疾病": "感染",
     "感染": "感染",
+    "infection": "感染",
 }
+
+SEMANTIC_ALIGNMENT_THRESHOLD = 0.9
 
 FALLBACK_TEXT = {
     "03_生理学": """
@@ -132,6 +153,7 @@ class KnowledgePipeline:
         nodes, edges = self._extract_graph(documents, chapters)
         decisions = self._build_decisions(nodes)
         compression = self._build_compression(chapters, decisions, nodes)
+        retrieval_index = self._build_retrieval_index(chapters)
 
         state = {
             "documents": documents,
@@ -146,8 +168,10 @@ class KnowledgePipeline:
                 "demo_paths": [str(path) for path in DEFAULT_DEMO_PATHS],
                 "max_pages_per_document": max_pages_per_document,
                 "method": "deterministic-rules-with-demo-fallback",
+                "retrieval": "keyword+char-bigram-tfidf-cosine",
             },
             "_chapter_index": chapters,
+            "_retrieval_index": retrieval_index,
         }
         self.store.save(state)
         return self._public_state(state)
@@ -158,12 +182,21 @@ class KnowledgePipeline:
         if not chapters:
             return self._not_found(question)
 
+        retrieval_index = state.get("_retrieval_index") or {}
+        query_vec = self._query_vector(question, retrieval_index.get("idf", {}))
+        chapter_vecs = retrieval_index.get("chapters", {})
+
         scored = []
         for chapter in chapters:
             text = chapter.get("text") or chapter.get("excerpt", "")
-            score = self._score(question, " ".join([chapter.get("title", ""), chapter.get("document_title", ""), text]))
-            if score > 0:
-                scored.append((score, chapter))
+            keyword_score = self._score(
+                question,
+                " ".join([chapter.get("title", ""), chapter.get("document_title", ""), text]),
+            )
+            cosine = self._sparse_dot(query_vec, chapter_vecs.get(chapter.get("id"), {}))
+            hybrid = keyword_score + 0.35 * cosine
+            if hybrid > 0:
+                scored.append((hybrid, chapter))
 
         scored.sort(key=lambda item: item[0], reverse=True)
         best = scored[:top_k]
@@ -254,7 +287,9 @@ class KnowledgePipeline:
             {
                 "source": edge.get("source"),
                 "target": edge.get("target"),
-                "relation": edge.get("relation"),
+                "relation": edge.get("relation_type") or edge.get("relation"),
+                "relation_type": edge.get("relation_type") or edge.get("relation"),
+                "description": edge.get("description") or edge.get("reason", ""),
             }
             for edge in edges
             if edge.get("source") in visible_node_ids and edge.get("target") in visible_node_ids
@@ -275,6 +310,7 @@ class KnowledgePipeline:
                     "reason": decision.get("reason", ""),
                     "confidence": decision.get("confidence", 0),
                     "status": decision.get("status", "active"),
+                    "alignmentMethod": decision.get("alignment_method", ""),
                 }
             )
 
@@ -311,6 +347,118 @@ class KnowledgePipeline:
                     for item in rag.get("citations", [])
                 ],
             },
+        }
+
+    def list_textbooks(self) -> list[dict[str, Any]]:
+        state = self.store.load()
+        documents = state.get("documents", [])
+        chapters = state.get("chapters", [])
+        result: list[dict[str, Any]] = []
+        for document in documents:
+            doc_chapters = [
+                chapter for chapter in chapters if chapter.get("document_id") == document.get("id")
+            ]
+            result.append(
+                {
+                    "textbook_id": document.get("id"),
+                    "title": document.get("title"),
+                    "format": str(document.get("format", "")).upper(),
+                    "total_chars": document.get("char_count", 0),
+                    "chapter_count": document.get("chapter_count", len(doc_chapters)),
+                    "status": document.get("status", "parsed"),
+                }
+            )
+        return result
+
+    def textbook_graph(self, textbook_id: str) -> dict[str, Any]:
+        """Return spec-compliant single-textbook knowledge graph.
+
+        Output shape: {
+            "textbook_id": "...",
+            "title": "...",
+            "nodes": [{id,name,definition,category,chapter,page}, ...],
+            "edges": [{source,target,relation_type,description}, ...],
+            "extraction_method": "llm" | "rules" | "mixed"
+        }
+        """
+        state = self.store.load()
+        documents = state.get("documents", [])
+        document = next((item for item in documents if item.get("id") == textbook_id), None)
+        if not document:
+            # tolerate slug / title lookups
+            document = next(
+                (
+                    item
+                    for item in documents
+                    if item.get("title") == textbook_id or str(item.get("id", "")).endswith(textbook_id)
+                ),
+                None,
+            )
+        if not document:
+            raise ValueError(f"Textbook not found: {textbook_id}")
+
+        doc_id = document.get("id")
+        all_nodes = state.get("nodes", [])
+        all_edges = state.get("edges", [])
+
+        scoped_nodes = [
+            node
+            for node in all_nodes
+            if node.get("document_id") == doc_id
+            and node.get("category") != "chapter"
+            and node.get("status") != "removed"
+        ]
+        spec_nodes = [
+            {
+                "id": node.get("id"),
+                "name": node.get("name"),
+                "definition": node.get("definition", ""),
+                "category": node.get("category", "核心概念"),
+                "chapter": node.get("chapter") or node.get("chapter_title", ""),
+                "page": node.get("page", 1),
+            }
+            for node in scoped_nodes
+        ]
+        scoped_ids = {node["id"] for node in spec_nodes}
+        spec_edges = []
+        seen: set[tuple[str, str, str]] = set()
+        for edge in all_edges:
+            relation = edge.get("relation_type") or edge.get("relation")
+            if relation not in RELATION_TYPES:
+                continue
+            src, tgt = edge.get("source"), edge.get("target")
+            if src not in scoped_ids or tgt not in scoped_ids:
+                continue
+            key = (src, tgt, relation)
+            if key in seen:
+                continue
+            seen.add(key)
+            spec_edges.append(
+                {
+                    "source": src,
+                    "target": tgt,
+                    "relation_type": relation,
+                    "description": edge.get("description") or edge.get("reason", ""),
+                }
+            )
+
+        methods = {node.get("extraction_method") for node in scoped_nodes if node.get("extraction_method")}
+        if len(methods) == 1:
+            extraction_method = next(iter(methods))
+        elif methods:
+            extraction_method = "mixed"
+        else:
+            extraction_method = "rules"
+
+        return {
+            "textbook_id": doc_id,
+            "title": document.get("title"),
+            "total_chars": document.get("char_count", 0),
+            "chapter_count": document.get("chapter_count", 0),
+            "nodes": spec_nodes,
+            "edges": spec_edges,
+            "extraction_method": extraction_method,
+            "llm_enabled": llm_configured(),
         }
 
     def apply_feedback(self, feedback: FeedbackRequest) -> dict[str, Any]:
@@ -493,7 +641,6 @@ class KnowledgePipeline:
     def _extract_graph(self, documents: list[dict[str, Any]], chapters: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         nodes: list[dict[str, Any]] = []
         edges: list[dict[str, Any]] = []
-        node_by_key: dict[tuple[str, str, str], str] = {}
 
         for chapter in chapters:
             chapter_node_id = self._id("node", chapter["id"])
@@ -507,6 +654,7 @@ class KnowledgePipeline:
                     "document_title": chapter["document_title"],
                     "chapter_id": chapter["id"],
                     "chapter_title": chapter["title"],
+                    "chapter": chapter["title"],
                     "page": chapter["start_page"],
                     "frequency": 1,
                     "source_count": 1,
@@ -516,53 +664,86 @@ class KnowledgePipeline:
                 }
             )
 
-            concepts = self._chapter_concepts(chapter)
-            concept_ids = []
-            for name, category in concepts:
-                key = (chapter["document_id"], chapter["id"], name)
-                if key in node_by_key:
+            extracted = extract_chapter(
+                chapter.get("text", ""),
+                chapter.get("title", ""),
+                chapter.get("document_title", ""),
+                chapter.get("start_page", 1),
+            )
+            method = extracted.get("method", "rules")
+            spec_nodes = extracted.get("nodes", [])
+            spec_edges = extracted.get("edges", [])
+
+            local_id_map: dict[str, str] = {}
+            concept_ids: list[str] = []
+            for spec_node in spec_nodes:
+                name = spec_node.get("name", "")
+                if not name:
                     continue
                 node_id = self._id("node", f"{chapter['id']}-{name}")
-                node_by_key[key] = node_id
+                local_id_map[spec_node.get("id", "")] = node_id
+                local_id_map[name] = node_id
                 concept_ids.append(node_id)
+                definition = spec_node.get("definition") or self._definition_for(name, chapter.get("text", ""))
+                category = spec_node.get("category") or "核心概念"
+                page = spec_node.get("page", chapter.get("start_page", 1))
+                freq = chapter.get("text", "").count(name) or 1
                 nodes.append(
                     {
                         "id": node_id,
                         "name": name,
                         "category": category,
-                        "definition": self._definition_for(name, chapter["text"]),
+                        "definition": definition,
                         "document_id": chapter["document_id"],
                         "document_title": chapter["document_title"],
                         "chapter_id": chapter["id"],
                         "chapter_title": chapter["title"],
-                        "page": chapter["start_page"],
-                        "frequency": chapter["text"].count(name) or 1,
+                        "chapter": spec_node.get("chapter") or chapter["title"],
+                        "page": page,
+                        "frequency": freq,
                         "source_count": 1,
-                        "importance": min(1.0, 0.45 + (chapter["text"].count(name) * 0.1)),
+                        "importance": min(1.0, 0.45 + (freq * 0.1)),
                         "status": "active",
                         "source_refs": [self._source_ref(chapter)],
+                        "extraction_method": method,
                     }
                 )
+
+            # chapter -> concept: spec vocabulary "contains"
+            for node_id in concept_ids:
                 edges.append(
                     {
                         "id": self._id("edge", f"{chapter_node_id}-{node_id}"),
                         "source": chapter_node_id,
                         "target": node_id,
-                        "relation": "contains",
-                        "reason": "章节正文包含该知识点",
+                        "relation_type": "contains",
+                        "description": f"章节《{chapter['title']}》包含该知识点",
                         "weight": 0.9,
+                        "relation": "contains",
+                        "reason": f"章节《{chapter['title']}》包含该知识点",
                     }
                 )
 
-            for left, right in zip(concept_ids, concept_ids[1:]):
+            # concept <-> concept edges produced by extractor (LLM or rules)
+            for spec_edge in spec_edges:
+                source_id = local_id_map.get(spec_edge.get("source"))
+                target_id = local_id_map.get(spec_edge.get("target"))
+                relation = spec_edge.get("relation_type")
+                if not source_id or not target_id or source_id == target_id:
+                    continue
+                if relation not in RELATION_TYPES:
+                    continue
+                description = spec_edge.get("description") or ""
                 edges.append(
                     {
-                        "id": self._id("edge", f"{left}-{right}-related"),
-                        "source": left,
-                        "target": right,
-                        "relation": "related",
-                        "reason": "同一章节内共同出现",
-                        "weight": 0.55,
+                        "id": self._id("edge", f"{source_id}-{target_id}-{relation}"),
+                        "source": source_id,
+                        "target": target_id,
+                        "relation_type": relation,
+                        "description": description,
+                        "weight": 0.65,
+                        "relation": relation,
+                        "reason": description,
                     }
                 )
 
@@ -608,6 +789,10 @@ class KnowledgePipeline:
                 continue
             by_doc[node["document_id"]].setdefault(node["name"], node["id"])
 
+        existing = {
+            (e.get("source"), e.get("target"), e.get("relation_type") or e.get("relation"))
+            for e in edges
+        }
         prerequisite_pairs = [
             ("细胞", "动作电位"),
             ("稳态", "负反馈"),
@@ -618,39 +803,50 @@ class KnowledgePipeline:
         for doc_nodes in by_doc.values():
             for source_name, target_name in prerequisite_pairs:
                 if source_name in doc_nodes and target_name in doc_nodes:
+                    src = doc_nodes[source_name]
+                    tgt = doc_nodes[target_name]
+                    key = (src, tgt, "prerequisite")
+                    if key in existing:
+                        continue
+                    existing.add(key)
+                    description = f"理解{target_name}前需要先掌握{source_name}"
                     edges.append(
                         {
-                            "id": self._id("edge", f"{doc_nodes[source_name]}-{doc_nodes[target_name]}-pre"),
-                            "source": doc_nodes[source_name],
-                            "target": doc_nodes[target_name],
-                            "relation": "prerequisite",
-                            "reason": f"理解{target_name}前需要先掌握{source_name}",
+                            "id": self._id("edge", f"{src}-{tgt}-pre"),
+                            "source": src,
+                            "target": tgt,
+                            "relation_type": "prerequisite",
+                            "description": description,
                             "weight": 0.7,
+                            "relation": "prerequisite",
+                            "reason": description,
                         }
                     )
 
     def _build_decisions(self, nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
         concept_nodes = [node for node in nodes if node.get("category") != "chapter"]
-        groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        for node in concept_nodes:
-            groups[self._normalize(node["name"])].append(node)
+        groups = self._semantic_groups(concept_nodes)
 
         decisions: list[dict[str, Any]] = []
         for normalized, group in groups.items():
             doc_titles = sorted({item["document_title"] for item in group})
             affected = [item["id"] for item in group]
             if len(doc_titles) >= 2:
+                evidence_node = max(group, key=lambda item: item.get("_alignment_score", 0))
+                evidence = evidence_node.get("_alignment_reason") or "同义词归一或本地文本向量相似度达到阈值"
+                confidence = max(item.get("_alignment_score", 0.86) for item in group)
                 decisions.append(
                     {
                         "id": self._id("decision", f"merge-{normalized}"),
                         "action": "merge",
                         "affected_node_ids": affected,
-                        "result_node_id": affected[0],
-                        "result_name": group[0]["name"],
-                        "reason": f"{group[0]['name']}在多本教材中重复出现，保留共同定义并合并来源",
-                        "confidence": 0.86,
+                        "result_node_id": evidence_node["id"],
+                        "result_name": evidence_node["name"],
+                        "reason": f"{evidence_node['name']}在多本教材中语义对齐：{evidence}；保留来源更完整的定义并合并节点",
+                        "confidence": round(min(confidence, 0.98), 2),
                         "status": "active",
                         "source_documents": doc_titles,
+                        "alignment_method": evidence_node.get("_alignment_method", "synonym_or_local_vector"),
                     }
                 )
             elif group[0].get("importance", 0) >= 0.7:
@@ -717,6 +913,92 @@ class KnowledgePipeline:
             )
         return decisions[:40]
 
+    def _semantic_groups(self, concept_nodes: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+
+        for node in concept_nodes:
+            normalized = self._normalize(node["name"])
+            raw_key = self._normalize_text(node["name"])
+            node["_alignment_method"] = "synonym" if normalized != raw_key else "exact_name"
+            node["_alignment_score"] = 0.96 if normalized != raw_key else 0.86
+            node["_alignment_reason"] = f"名称归一为“{normalized}”"
+            groups[normalized].append(node)
+
+        self._merge_vector_similar_groups(groups)
+
+        return groups
+
+    def _merge_vector_similar_groups(self, groups: dict[str, list[dict[str, Any]]]) -> None:
+        keys = list(groups)
+        removed: set[str] = set()
+        for idx, left_key in enumerate(keys):
+            if left_key in removed or left_key not in groups:
+                continue
+            left_group = groups[left_key]
+            for right_key in keys[idx + 1 :]:
+                if right_key in removed or right_key not in groups:
+                    continue
+                right_group = groups[right_key]
+                if not self._has_cross_document_overlap(left_group, right_group):
+                    continue
+                score = self._group_name_similarity(left_group, right_group)
+                if score < SEMANTIC_ALIGNMENT_THRESHOLD:
+                    continue
+                for node in right_group:
+                    node["_alignment_method"] = "local_char_ngram_vector"
+                    node["_alignment_score"] = score
+                    node["_alignment_reason"] = f"与“{left_group[0].get('name', left_key)}”的本地字符 n-gram 向量相似度 {score:.2f}"
+                left_group.extend(right_group)
+                del groups[right_key]
+                removed.add(right_key)
+
+    def _has_cross_document_overlap(self, left: list[dict[str, Any]], right: list[dict[str, Any]]) -> bool:
+        left_docs = {node.get("document_title") for node in left}
+        right_docs = {node.get("document_title") for node in right}
+        return bool(left_docs - right_docs) and bool(right_docs - left_docs)
+
+    def _group_name_similarity(self, left: list[dict[str, Any]], right: list[dict[str, Any]]) -> float:
+        best = 0.0
+        for left_node in left:
+            for right_node in right:
+                score = self._counter_cosine(
+                    self._text_vector(left_node.get("name", "")),
+                    self._text_vector(right_node.get("name", "")),
+                )
+                best = max(best, score)
+        return best
+
+    def _node_semantic_similarity(self, left: dict[str, Any], right: dict[str, Any]) -> float:
+        left_name = self._normalize(left.get("name", ""))
+        right_name = self._normalize(right.get("name", ""))
+        if left_name == right_name:
+            return 0.96
+
+        left_text = " ".join([left_name, left.get("category", ""), left.get("definition", "")])
+        right_text = " ".join([right_name, right.get("category", ""), right.get("definition", "")])
+        return self._counter_cosine(self._text_vector(left_text), self._text_vector(right_text))
+
+    def _text_vector(self, text: str) -> Counter[str]:
+        normalized = self._normalize_text(text)
+        tokens: list[str] = []
+        tokens.extend(self._terms(normalized))
+        compact = re.sub(r"\s+", "", normalized)
+        if compact:
+            tokens.extend(compact[idx : idx + 2] for idx in range(max(1, len(compact) - 1)))
+            tokens.extend(compact[idx : idx + 3] for idx in range(max(1, len(compact) - 2)))
+        return Counter(token for token in tokens if token)
+
+    def _counter_cosine(self, left: Counter[str], right: Counter[str]) -> float:
+        if not left or not right:
+            return 0.0
+        overlap = set(left) & set(right)
+        numerator = sum(left[token] * right[token] for token in overlap)
+        left_norm = math.sqrt(sum(value * value for value in left.values()))
+        right_norm = math.sqrt(sum(value * value for value in right.values()))
+        if not left_norm or not right_norm:
+            return 0.0
+        return numerator / (left_norm * right_norm)
+
     def _build_compression(
         self,
         chapters: list[dict[str, Any]],
@@ -757,6 +1039,7 @@ class KnowledgePipeline:
     def _public_state(self, state: dict[str, Any]) -> dict[str, Any]:
         public = dict(state)
         public.pop("_chapter_index", None)
+        public.pop("_retrieval_index", None)
         return public
 
     def _definition_for(self, keyword: str, text: str) -> str:
@@ -786,6 +1069,67 @@ class KnowledgePipeline:
         }
         bonus = (sum(1 for term in q_terms if term in text) * 0.02) + (len(catalog_keywords) * 0.18)
         return (len(overlap) / max(len(q_terms), 1)) + bonus
+
+    def _char_bigrams(self, text: str) -> list[str]:
+        grams: list[str] = []
+        for block in re.findall(r"[\u4e00-\u9fff]+", text):
+            if len(block) == 1:
+                grams.append(block)
+                continue
+            grams.extend(block[idx : idx + 2] for idx in range(len(block) - 1))
+        grams.extend(token.lower() for token in re.findall(r"[A-Za-z0-9_]{2,}", text))
+        return grams
+
+    def _build_retrieval_index(self, chapters: list[dict[str, Any]]) -> dict[str, Any]:
+        chapter_grams: dict[str, list[str]] = {}
+        doc_freq: Counter[str] = Counter()
+        for chapter in chapters:
+            text = " ".join(
+                [
+                    chapter.get("title", ""),
+                    chapter.get("document_title", ""),
+                    chapter.get("text", ""),
+                ]
+            )
+            grams = self._char_bigrams(text)
+            if not grams:
+                continue
+            chapter_grams[chapter["id"]] = grams
+            for term in set(grams):
+                doc_freq[term] += 1
+
+        total_docs = max(1, len(chapter_grams))
+        idf: dict[str, float] = {
+            term: math.log((total_docs + 1) / (freq + 1)) + 1.0
+            for term, freq in doc_freq.items()
+        }
+
+        chapter_vectors: dict[str, dict[str, float]] = {}
+        for chapter_id, grams in chapter_grams.items():
+            tf = Counter(grams)
+            length = max(1, len(grams))
+            vector = {term: (count / length) * idf.get(term, 1.0) for term, count in tf.items()}
+            norm = math.sqrt(sum(value * value for value in vector.values())) or 1.0
+            chapter_vectors[chapter_id] = {term: value / norm for term, value in vector.items()}
+
+        return {"idf": idf, "chapters": chapter_vectors}
+
+    def _query_vector(self, question: str, idf: dict[str, float]) -> dict[str, float]:
+        grams = self._char_bigrams(question)
+        if not grams or not idf:
+            return {}
+        tf = Counter(grams)
+        length = max(1, len(grams))
+        vector = {term: (count / length) * idf.get(term, 1.0) for term, count in tf.items()}
+        norm = math.sqrt(sum(value * value for value in vector.values())) or 1.0
+        return {term: value / norm for term, value in vector.items()}
+
+    def _sparse_dot(self, query_vec: dict[str, float], doc_vec: dict[str, float]) -> float:
+        if not query_vec or not doc_vec:
+            return 0.0
+        if len(query_vec) > len(doc_vec):
+            query_vec, doc_vec = doc_vec, query_vec
+        return sum(weight * doc_vec.get(term, 0.0) for term, weight in query_vec.items())
 
     def _terms(self, text: str) -> set[str]:
         chinese = re.findall(r"[\u4e00-\u9fff]{1,}", text)
@@ -820,8 +1164,16 @@ class KnowledgePipeline:
         }
 
     def _normalize(self, name: str) -> str:
-        cleaned = re.sub(r"\s+", "", name)
+        cleaned = self._normalize_text(name)
         return SYNONYMS.get(cleaned, cleaned)
+
+    def _normalize_text(self, text: str) -> str:
+        cleaned = text.lower()
+        cleaned = cleaned.replace("white blood cell", "whitebloodcell")
+        cleaned = cleaned.replace("white blood cells", "whitebloodcells")
+        cleaned = cleaned.replace("immunological response", "immuneresponse")
+        cleaned = re.sub(r"[\s_\-·/（）()，,。:：;；]+", "", cleaned)
+        return cleaned
 
     def _frontend_category(self, category: str) -> str:
         if "机制" in category or "调节" in category:

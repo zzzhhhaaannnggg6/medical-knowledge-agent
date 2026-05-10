@@ -24,10 +24,28 @@ May 10 ZJU AI full-stack hackathon project. The current deliverable is a Vite/Re
 ## Report Docs
 
 - `docs/Agent 架构说明.md`
+- `docs/prompts.md`
 - `docs/需求分析.md`
 - `docs/系统设计.md`
 - `report/整合报告.md`
 - `report/技术报告草稿.md`
+
+## Docker Quick Start
+
+Requires Docker Desktop with Compose support. The compose setup runs the FastAPI backend on port `8001` and the Vite frontend on port `5173`.
+
+```bash
+cp .env.example .env
+# Required: edit TEXTBOOK_DIR in .env so it points to the textbook PDF folder on this machine.
+docker compose up --build
+```
+
+Open:
+
+- Frontend: <http://localhost:5173>
+- Backend health: <http://localhost:8001/health>
+
+The backend image does not copy textbook PDFs. `docker-compose.yml` mounts `TEXTBOOK_DIR` read-only into the container at `/textbooks`, and generated backend state is kept in a Docker volume. If `TEXTBOOK_DIR` points to a missing folder, the backend demo loader will not find the default PDFs.
 
 ## Local Run
 
@@ -43,7 +61,7 @@ Open the Vite URL printed by the terminal, usually `http://localhost:5173`.
 
 ## Local Backend
 
-The backend is useful for local validation and API alignment. It reads local textbook PDFs from `/Users/li/Desktop/黑客松/textbooks`; those PDFs are not committed. Until the backend has public-safe demo data that does not depend on that local path, the static frontend Demo remains the submission fallback.
+The backend is useful for local validation and API alignment. By default it reads local textbook PDFs from `/Users/li/Desktop/黑客松/textbooks`; set `TEXTBOOK_DIR` to override that path. Those PDFs are not committed. Until the backend has public-safe demo data that does not depend on local textbooks, the static frontend Demo remains the submission fallback.
 
 ```bash
 cd "/Users/li/Documents/New project 4"
@@ -82,7 +100,7 @@ If the backend is unavailable, the frontend falls back to the built-in demo data
 
 - The public GitHub Pages link is a static demo, not a public backend deployment.
 - The smoke test covers 2 textbook page windows, not the full 7-book corpus.
-- Current RAG uses keyword/rule retrieval; it is not an embedding/vector-database pipeline.
+- Current RAG uses lightweight hybrid retrieval: keyword/rule scoring plus character n-gram TF-IDF cosine. It is not a full embedding/vector-database pipeline.
 - Teacher feedback is simulated feedback for one integration decision, not a real teacher multi-turn conversation.
 - Some PDF excerpts still contain table-of-contents or header noise and need further cleaning.
 

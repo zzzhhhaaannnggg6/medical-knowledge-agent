@@ -5,6 +5,7 @@ import {
   AlertCircle,
   BookOpen,
   CheckCircle2,
+  FileText,
   GitMerge,
   Layers3,
   MessageSquareText,
@@ -17,10 +18,13 @@ import {
   SlidersHorizontal,
   Sparkles,
   Stamp,
+  UploadCloud,
 } from "lucide-react";
 import "./styles.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "";
+const DEFAULT_UPLOAD_API_BASE = API_BASE || "http://127.0.0.1:8001";
+const SUPPORTED_UPLOAD_EXTENSIONS = new Set(["pdf", "md", "txt"]);
 
 const mockState = {
   textbooks: [
@@ -217,10 +221,27 @@ const typeLabels = {
   split: "拆分",
 };
 
+const alignmentLabels = {
+  exact_name: "同名对齐",
+  synonym: "同义词对齐",
+  local_char_ngram_vector: "本地 n-gram 向量",
+  synonym_or_local_vector: "同义/本地向量",
+};
+
 const relationLabels = {
   contains: "包含",
   prerequisite: "前置",
   related: "相关",
+  parallel: "并列",
+  applies_to: "应用于",
+};
+
+const RELATION_COLOR = {
+  prerequisite: "#b3452e",
+  contains: "#1f6b5e",
+  parallel: "#a67017",
+  applies_to: "#5a4e9c",
+  related: "#667085",
 };
 
 const sourceColorMap = {
@@ -261,6 +282,32 @@ function formatNumber(value) {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return "0 KB";
+  const mb = bytes / (1024 * 1024);
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
+function fileFormat(filename) {
+  const ext = filename.split(".").pop() || "";
+  return ext.toUpperCase();
+}
+
+function normalizeApiBase(value) {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function applyDashboardPayload(next) {
+  return {
+    textbooks: next.textbooks || mockState.textbooks,
+    graph: next.graph || mockState.graph,
+    compression: next.compression || mockState.compression,
+    decisions: next.decisions || mockState.decisions,
+    rag: next.rag || mockState.rag,
+  };
+}
+
 function useDashboardData() {
   const [data, setData] = useState(mockState);
   const [source, setSource] = useState("mock");
@@ -281,13 +328,7 @@ function useDashboardData() {
       const res = await fetch(`${API_BASE}/api/dashboard`);
       if (!res.ok) throw new Error(`API ${res.status}`);
       const next = await res.json();
-      setData({
-        textbooks: next.textbooks || mockState.textbooks,
-        graph: next.graph || mockState.graph,
-        compression: next.compression || mockState.compression,
-        decisions: next.decisions || mockState.decisions,
-        rag: next.rag || mockState.rag,
-      });
+      setData(applyDashboardPayload(next));
       setSource("api");
     } catch (err) {
       setData(mockState);
@@ -302,7 +343,13 @@ function useDashboardData() {
     loadData();
   }, []);
 
-  return { data, source, loading, error, reload: loadData };
+  const loadUploadedDashboard = (next) => {
+    setData(applyDashboardPayload(next));
+    setSource("api");
+    setError("");
+  };
+
+  return { data, source, loading, error, reload: loadData, loadUploadedDashboard };
 }
 
 function ReviewerBar({ stats, onJump, activeKey }) {
@@ -460,7 +507,8 @@ function GraphPanel({
         textStyle: { color: "#f5efe2", fontSize: 12, lineHeight: 18 },
         formatter(params) {
           if (params.dataType === "edge") {
-            return `<b>${relationLabels[params.data.relation] || params.data.relation}</b>`;
+            const rel = params.data.relation_type || params.data.relation;
+            return `<b>${relationLabels[rel] || rel}</b>`;
           }
           const n = params.data;
           return `
@@ -540,16 +588,18 @@ function GraphPanel({
             .filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
             .map((edge) => {
               const onPath = showTeachingPath && isTeachingPathEdge(edge);
+              const rel = edge.relation_type || edge.relation;
               return {
                 source: edge.source,
                 target: edge.target,
-                relation: edge.relation,
+                relation: rel,
+                relation_type: rel,
                 lineStyle: onPath
                   ? { color: "#1f6b5e", width: 2.8, opacity: 0.95, curveness: 0.08 }
                   : undefined,
                 label: {
                   show: true,
-                  formatter: relationLabels[edge.relation] || edge.relation,
+                  formatter: relationLabels[rel] || rel,
                   color: onPath ? "#1f6b5e" : "#667085",
                   fontWeight: onPath ? 700 : 400,
                   fontSize: 10,
@@ -695,7 +745,7 @@ function GraphPanel({
   );
 }
 
-function TextbookPanel({ textbooks }) {
+function TextbookPanel({ textbooks, onViewGraph }) {
   const parsedCount = textbooks.filter((b) => b.status === "parsed").length;
   return (
     <section className="panel" id="section-textbooks">
@@ -738,8 +788,407 @@ function TextbookPanel({ textbooks }) {
                 ))}
               </div>
             )}
+            {onViewGraph && book.status === "parsed" && book.id && (
+              <button
+                type="button"
+                className="book-graph-cta"
+                onClick={() => onViewGraph(book)}
+                title="查看该教材的单本知识图谱"
+              >
+                <Layers3 size={13} /> 查看本书图谱
+              </button>
+            )}
           </article>
         ))}
+      </div>
+    </section>
+  );
+}
+
+function SingleTextbookGraphModal({ open, textbook, apiBase, onClose }) {
+  const containerRef = useRef(null);
+  const [status, setStatus] = useState("idle");
+  const [payload, setPayload] = useState(null);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+
+  useEffect(() => {
+    if (!open || !textbook || !apiBase) return;
+    let cancelled = false;
+    const run = async () => {
+      setStatus("loading");
+      setError("");
+      try {
+        const endpoint = normalizeApiBase(apiBase);
+        const res = await fetch(
+          `${endpoint}/api/textbooks/${encodeURIComponent(textbook.id)}/graph`,
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setPayload(data);
+        setSelectedId(data.nodes?.[0]?.id || "");
+        setStatus("ready");
+      } catch (err) {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "加载失败");
+        setPayload(null);
+        setStatus("error");
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, textbook, apiBase]);
+
+  useEffect(() => {
+    if (!open || status !== "ready" || !containerRef.current || !payload) return;
+    const chart = echarts.init(containerRef.current);
+    const categoryNames = Array.from(new Set(payload.nodes.map((n) => n.category)));
+    chart.setOption({
+      tooltip: {
+        trigger: "item",
+        backgroundColor: "rgba(22, 30, 40, 0.94)",
+        borderWidth: 0,
+        padding: [10, 12],
+        textStyle: { color: "#f5efe2", fontSize: 12, lineHeight: 18 },
+        formatter(params) {
+          if (params.dataType === "edge") {
+            const rel = params.data.relation_type || params.data.relation;
+            const desc = params.data.description || "";
+            return `<b>${relationLabels[rel] || rel}</b>${desc ? `<br/><span style='color:#d5c9a8;font-size:11px'>${desc}</span>` : ""}`;
+          }
+          const n = params.data;
+          return `
+            <div style="font-family:'Source Serif Pro','Noto Serif SC',serif;font-size:13px;margin-bottom:4px;"><b>${n.name}</b></div>
+            <div style="color:#d5c9a8;font-size:11px;">${n.category} · ${n.chapter || ""}</div>
+            <div style="color:#b8b2a1;font-size:11px;">页 ${n.page}</div>
+            <div style="color:#b8b2a1;font-size:11px;margin-top:4px;max-width:260px;">${n.definition || ""}</div>`;
+        },
+      },
+      legend: {
+        top: 8,
+        left: 14,
+        itemWidth: 10,
+        itemHeight: 10,
+        textStyle: { color: "#3d4552", fontSize: 12 },
+        data: categoryNames,
+      },
+      series: [
+        {
+          type: "graph",
+          layout: "force",
+          roam: true,
+          draggable: true,
+          categories: categoryNames.map((n) => ({ name: n })),
+          edgeSymbol: ["none", "arrow"],
+          force: { repulsion: 340, edgeLength: [90, 180], gravity: 0.08 },
+          label: {
+            show: true,
+            position: "right",
+            color: "#1d2330",
+            fontSize: 12,
+            fontWeight: 600,
+            fontFamily: "'Noto Serif SC','Source Serif Pro',serif",
+          },
+          lineStyle: { width: 1.3, curveness: 0.12, opacity: 0.8 },
+          emphasis: { focus: "adjacency", lineStyle: { width: 2.6 } },
+          data: payload.nodes.map((n) => ({
+            ...n,
+            value: 1,
+            category: categoryNames.indexOf(n.category),
+            symbolSize: n.id === selectedId ? 48 : 36,
+            itemStyle: {
+              color: sourceColor(payload.title || textbook.title),
+              borderColor: n.id === selectedId ? "#101828" : "#f7f1e1",
+              borderWidth: n.id === selectedId ? 4 : 2,
+            },
+          })),
+          links: payload.edges.map((e) => {
+            const rel = e.relation_type || e.relation;
+            return {
+              source: e.source,
+              target: e.target,
+              relation_type: rel,
+              description: e.description,
+              lineStyle: { color: RELATION_COLOR[rel] || "#667085", width: 1.6, opacity: 0.85 },
+              label: {
+                show: true,
+                formatter: relationLabels[rel] || rel,
+                color: RELATION_COLOR[rel] || "#667085",
+                fontSize: 10,
+                fontWeight: 600,
+                fontFamily: "'Source Serif Pro','Noto Serif SC',serif",
+              },
+            };
+          }),
+        },
+      ],
+    });
+    chart.on("click", (params) => {
+      if (params.dataType === "node") setSelectedId(params.data.id);
+    });
+    const resize = () => chart.resize();
+    window.addEventListener("resize", resize);
+    return () => {
+      window.removeEventListener("resize", resize);
+      chart.dispose();
+    };
+  }, [open, status, payload, selectedId, textbook]);
+
+  if (!open) return null;
+
+  const selectedNode = payload?.nodes?.find((n) => n.id === selectedId) || payload?.nodes?.[0];
+  const relationCounter = (payload?.edges || []).reduce((acc, e) => {
+    const rel = e.relation_type || e.relation || "other";
+    acc[rel] = (acc[rel] || 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <div className="book-graph-overlay" role="dialog" aria-modal="true">
+      <div className="book-graph-dialog">
+        <header>
+          <div>
+            <small>Single Textbook · Knowledge Graph</small>
+            <h3>{textbook?.title} · 单本知识图谱</h3>
+            {payload && (
+              <p className="book-graph-summary">
+                {payload.nodes.length} 节点 · {payload.edges.length} 关系 · 抽取方式{" "}
+                <code>{payload.extraction_method}</code>
+                {payload.llm_enabled ? "（LLM 已启用）" : "（LLM 未配置，使用规则抽取）"}
+              </p>
+            )}
+          </div>
+          <button className="book-graph-close" type="button" onClick={onClose} aria-label="关闭">
+            ×
+          </button>
+        </header>
+        <div className="book-graph-body">
+          {status === "loading" && <div className="book-graph-state">加载中……</div>}
+          {status === "error" && (
+            <div className="book-graph-state error">
+              <AlertCircle size={14} /> 加载失败：{error}
+            </div>
+          )}
+          {status === "ready" && payload && (
+            <>
+              <div className="book-graph-canvas" ref={containerRef} />
+              <aside className="book-graph-aside">
+                <div className="relation-legend">
+                  {Object.entries(relationLabels)
+                    .filter(([k]) => k !== "related")
+                    .map(([k, label]) => (
+                      <span key={k} style={{ "--chip": RELATION_COLOR[k] || "#667085" }}>
+                        <i />
+                        {label}
+                        <em>{relationCounter[k] || 0}</em>
+                      </span>
+                    ))}
+                </div>
+                {selectedNode && (
+                  <div className="book-graph-detail">
+                    <small>{selectedNode.category}</small>
+                    <strong>{selectedNode.name}</strong>
+                    <p>{selectedNode.definition || "（暂无定义）"}</p>
+                    <dl>
+                      <div>
+                        <dt>所在章节</dt>
+                        <dd>{selectedNode.chapter || "-"}</dd>
+                      </div>
+                      <div>
+                        <dt>页码</dt>
+                        <dd>{selectedNode.page}</dd>
+                      </div>
+                      <div>
+                        <dt>节点 ID</dt>
+                        <dd>
+                          <code>{selectedNode.id}</code>
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                )}
+              </aside>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UploadPanel({ apiBase, setApiBase, onDashboardLoaded, onUploaded }) {
+  const inputRef = useRef(null);
+  const [items, setItems] = useState([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const addFiles = (fileList) => {
+    const next = Array.from(fileList || []).map((file) => {
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const supported = SUPPORTED_UPLOAD_EXTENSIONS.has(ext);
+      return {
+        id: `${file.name}-${file.size}-${file.lastModified}`,
+        file,
+        name: file.name,
+        format: fileFormat(file.name),
+        size: formatFileSize(file.size),
+        status: supported ? "selected" : "failed",
+        note: supported ? "待解析" : "仅支持 PDF / MD / TXT",
+      };
+    });
+    setItems(next);
+    setMessage(next.length ? "" : "未选择文件");
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setDragActive(false);
+    addFiles(event.dataTransfer.files);
+  };
+
+  const uploadFiles = async () => {
+    const endpoint = normalizeApiBase(apiBase);
+    const ready = items.filter((item) => item.status !== "failed");
+    if (!endpoint) {
+      setMessage("请填写本地 FastAPI 后端地址");
+      return;
+    }
+    if (!ready.length) {
+      setMessage("请先选择 PDF、Markdown 或 TXT 教材");
+      return;
+    }
+
+    setUploading(true);
+    setMessage("解析中");
+    setItems((prev) =>
+      prev.map((item) =>
+        item.status === "failed" ? item : { ...item, status: "parsing", note: "解析中" },
+      ),
+    );
+
+    try {
+      const body = new FormData();
+      ready.forEach((item) => body.append("files", item.file));
+      body.append("max_pages_per_document", "25");
+
+      const uploadRes = await fetch(`${endpoint}/api/documents`, {
+        method: "POST",
+        body,
+      });
+      if (!uploadRes.ok) {
+        let detail = `上传失败：${uploadRes.status}`;
+        try {
+          const err = await uploadRes.json();
+          detail = err.detail || detail;
+        } catch (_) {
+          // Keep the HTTP status message when the backend does not return JSON.
+        }
+        throw new Error(detail);
+      }
+
+      const dashboardRes = await fetch(`${endpoint}/api/dashboard`);
+      if (!dashboardRes.ok) throw new Error(`Dashboard ${dashboardRes.status}`);
+      const dashboard = await dashboardRes.json();
+
+      onDashboardLoaded(dashboard);
+      setItems((prev) =>
+        prev.map((item) =>
+          item.status === "failed" ? item : { ...item, status: "done", note: "已完成" },
+        ),
+      );
+      setMessage(`解析完成：${dashboard.textbooks?.length || ready.length} 本教材已进入工作台`);
+      onUploaded && onUploaded();
+    } catch (err) {
+      const text = err instanceof Error ? err.message : "解析失败";
+      setItems((prev) =>
+        prev.map((item) =>
+          item.status === "parsing" ? { ...item, status: "failed", note: text } : item,
+        ),
+      );
+      setMessage(text);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const parsedCount = items.filter((item) => item.status === "done").length;
+
+  return (
+    <section className="panel upload-panel" id="section-upload">
+      <PanelHeading
+        tag="U"
+        eyebrow="Textbook Upload"
+        title="上传教材解析"
+        icon={UploadCloud}
+        meta={items.length ? `${parsedCount}/${items.length} 完成` : "PDF / MD / TXT"}
+        lede="把教材文件送入本地 FastAPI 解析后，工作台会刷新教材、章节、图谱、压缩与引用数据。"
+      />
+      <div
+        className={`drop-zone ${dragActive ? "active" : ""}`}
+        role="button"
+        tabIndex={0}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") inputRef.current?.click();
+        }}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".pdf,.md,.txt,application/pdf,text/markdown,text/plain"
+          onChange={(event) => addFiles(event.target.files)}
+        />
+        <UploadCloud size={24} />
+        <strong>拖拽教材到这里，或点击选择</strong>
+        <span>支持批量 PDF / Markdown / TXT</span>
+      </div>
+      <label className="api-base-field">
+        <span>后端地址</span>
+        <input
+          value={apiBase}
+          onChange={(event) => setApiBase(event.target.value)}
+          placeholder="http://127.0.0.1:8001"
+        />
+      </label>
+      {items.length > 0 && (
+        <div className="upload-list">
+          {items.map((item) => (
+            <article className={`upload-item status-${item.status}`} key={item.id}>
+              <FileText size={16} />
+              <div>
+                <strong>{item.name}</strong>
+                <span>{item.format} · {item.size}</span>
+              </div>
+              <em>{item.note}</em>
+            </article>
+          ))}
+        </div>
+      )}
+      <div className="upload-actions">
+        <button
+          className="primary-action"
+          type="button"
+          onClick={uploadFiles}
+          disabled={uploading}
+        >
+          <UploadCloud size={14} /> {uploading ? "解析中..." : "开始解析"}
+        </button>
+        {message && <span className="upload-message">{message}</span>}
       </div>
     </section>
   );
@@ -803,7 +1252,7 @@ function CompressionPanel({ compression }) {
   );
 }
 
-function DecisionsPanel({ decisions, onApplyFeedback }) {
+function DecisionsPanel({ decisions, onApplyFeedback, feedbackBusy, feedbackError }) {
   const [feedback, setFeedback] = useState("keep");
   const [selected, setSelected] = useState(decisions[0]?.id || "");
 
@@ -844,6 +1293,11 @@ function DecisionsPanel({ decisions, onApplyFeedback }) {
               <span className="conf">
                 置信 {(decision.confidence * 100).toFixed(0)}%
               </span>
+              {decision.alignmentMethod && (
+                <span className="alignment-method">
+                  {alignmentLabels[decision.alignmentMethod] || decision.alignmentMethod}
+                </span>
+              )}
               <span className="nodes">{decision.nodes.join(" · ")}</span>
               {decision.status === "teacher-adjusted" && (
                 <span className="teacher-mark">教师已批改</span>
@@ -880,9 +1334,11 @@ function DecisionsPanel({ decisions, onApplyFeedback }) {
           className="primary-action"
           onClick={() => onApplyFeedback(selected, feedback)}
           type="button"
+          disabled={feedbackBusy}
         >
-          <Stamp size={14} /> 盖章应用批注
+          <Stamp size={14} /> {feedbackBusy ? "写回中..." : "盖章应用批注"}
         </button>
+        {feedbackError && <p className="feedback-error">{feedbackError}</p>}
       </div>
     </section>
   );
@@ -895,14 +1351,50 @@ const QUICK_QUESTIONS = [
   "抽考：一个未收录的概念会怎么回答？",
 ];
 
-function RagPanel({ rag, seed, onSeedConsumed }) {
+function RagPanel({ rag, apiBase, seed, onSeedConsumed }) {
   const [query, setQuery] = useState(rag.question);
   const [answer, setAnswer] = useState(rag);
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState("");
 
-  const ask = (raw) => {
+  const normalizeRagResponse = (payload, question) => ({
+    question: payload.question || question,
+    answer: payload.answer || "当前知识库中未找到相关信息。",
+    citations: (payload.citations || []).map((item) => ({
+      textbook: item.textbook || item.document_title || "",
+      chapter: item.chapter || item.chapter_title || "",
+      pages: String(item.pages || item.page || ""),
+      relevance: item.relevance || 0,
+      excerpt: item.excerpt || item.snippet || "",
+    })),
+  });
+
+  const ask = async (raw) => {
     const q = (typeof raw === "string" ? raw : query).trim();
     if (!q) return;
     setQuery(q);
+    setError("");
+
+    const endpoint = normalizeApiBase(apiBase);
+    if (endpoint) {
+      setAsking(true);
+      try {
+        const res = await fetch(`${endpoint}/api/rag/query`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, top_k: 3 }),
+        });
+        if (!res.ok) throw new Error(`RAG ${res.status}`);
+        const payload = await res.json();
+        setAnswer(normalizeRagResponse(payload, q));
+        return;
+      } catch (err) {
+        setError("后端问答暂不可用，已回退到 Demo 回答。");
+      } finally {
+        setAsking(false);
+      }
+    }
+
     if (q.includes("不存在") || q.includes("未收录") || q.includes("抽考")) {
       setAnswer({
         question: q,
@@ -932,7 +1424,7 @@ function RagPanel({ rag, seed, onSeedConsumed }) {
         meta={`${answer.citations.length} 条引用`}
         lede="提问后系统会给出答案和逐条教材证据——书脊色带定位来源、相关度条显示命中强度；未命中会明确回复“当前知识库中未找到相关信息”。"
       />
-      <div className="search-box">
+      <div className={`search-box ${asking ? "is-loading" : ""}`}>
         <Search size={17} />
         <input
           id="rag-search-input"
@@ -941,8 +1433,11 @@ function RagPanel({ rag, seed, onSeedConsumed }) {
           placeholder="向医学知识库提问……（⌘/Ctrl + K 聚焦）"
           onKeyDown={(e) => e.key === "Enter" && ask()}
         />
-        <button onClick={() => ask()} type="button">提问</button>
+        <button onClick={() => ask()} type="button" disabled={asking}>
+          {asking ? "检索中..." : "提问"}
+        </button>
       </div>
+      {error && <p className="rag-error">{error}</p>}
       <div className="quick-questions">
         {QUICK_QUESTIONS.map((q) => (
           <button
@@ -1052,7 +1547,8 @@ function Header({ source, loading, error, onReload, onReview, onPrint, reviewRun
 }
 
 function App() {
-  const { data, source, loading, error, reload } = useDashboardData();
+  const { data, source, loading, error, reload, loadUploadedDashboard } = useDashboardData();
+  const [apiBase, setApiBase] = useState(DEFAULT_UPLOAD_API_BASE);
   const [selectedNodeId, setSelectedNodeId] = useState(data.graph.nodes[0]?.id || "");
   const [decisions, setDecisions] = useState(data.decisions);
   const [categoryFilter, setCategoryFilter] = useState("__all__");
@@ -1062,6 +1558,9 @@ function App() {
   const [reviewRunning, setReviewRunning] = useState(false);
   const [ragSeed, setRagSeed] = useState(null);
   const [activeKey, setActiveKey] = useState("decisions");
+  const [feedbackBusy, setFeedbackBusy] = useState(false);
+  const [feedbackError, setFeedbackError] = useState("");
+  const [bookGraphTarget, setBookGraphTarget] = useState(null);
 
   useEffect(() => {
     const sections = [
@@ -1156,29 +1655,71 @@ function App() {
     return `决策 ${broken.id} 将“${broken.result || broken.nodes.join("/")}”标记为删除，可能切断稳态→损伤→炎症→免疫应答的教学因果链。`;
   }, [decisions]);
 
-  const applyFeedback = (decisionId, feedbackType) => {
+  const applyFeedback = async (decisionId, feedbackType) => {
     const current = decisions.find((d) => d.id === decisionId);
     if (!current) return;
-    setDecisions((prev) =>
-      prev.map((decision) =>
-        decision.id === decisionId
-          ? {
-              ...decision,
-              type: feedbackType,
-              status: "teacher-adjusted",
-              reason: `模拟教师反馈已将该决策调整为“${typeLabels[feedbackType]}”，前端状态已刷新，等待后端持久化接口接入。`,
-            }
-          : decision,
-      ),
-    );
-    if (current.type !== feedbackType) {
-      setFeedbackDiff({
-        id: decisionId,
-        from: current.type,
-        to: feedbackType,
-        at: Date.now(),
-      });
-      window.setTimeout(() => setFeedbackDiff((cur) => (cur && cur.id === decisionId ? null : cur)), 6000);
+
+    const endpoint = normalizeApiBase(apiBase);
+    setFeedbackError("");
+    setFeedbackBusy(true);
+    try {
+      if (endpoint) {
+        const res = await fetch(`${endpoint}/api/feedback`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            decision_id: decisionId,
+            action: feedbackType,
+            note: `模拟教师反馈：将该整合决策调整为${typeLabels[feedbackType]}`,
+          }),
+        });
+        if (!res.ok) throw new Error(`Feedback ${res.status}`);
+        const payload = await res.json();
+        const dashboard = await fetch(`${endpoint}/api/dashboard`);
+        if (dashboard.ok) {
+          loadUploadedDashboard(await dashboard.json());
+        } else if (payload.state) {
+          loadUploadedDashboard(payload.state);
+        }
+      }
+
+      setDecisions((prev) =>
+        prev.map((decision) =>
+          decision.id === decisionId
+            ? {
+                ...decision,
+                type: feedbackType,
+                status: "teacher-adjusted",
+                reason: `模拟教师反馈已将该决策调整为“${typeLabels[feedbackType]}”，并写回后端状态。`,
+              }
+            : decision,
+        ),
+      );
+      if (current.type !== feedbackType) {
+        setFeedbackDiff({
+          id: decisionId,
+          from: current.type,
+          to: feedbackType,
+          at: Date.now(),
+        });
+        window.setTimeout(() => setFeedbackDiff((cur) => (cur && cur.id === decisionId ? null : cur)), 6000);
+      }
+    } catch (err) {
+      setFeedbackError("后端反馈写回失败，已保留当前页面状态。");
+      setDecisions((prev) =>
+        prev.map((decision) =>
+          decision.id === decisionId
+            ? {
+                ...decision,
+                type: feedbackType,
+                status: "teacher-adjusted",
+                reason: `模拟教师反馈已将该决策调整为“${typeLabels[feedbackType]}”，但后端写回失败。`,
+              }
+            : decision,
+        ),
+      );
+    } finally {
+      setFeedbackBusy(false);
     }
   };
 
@@ -1192,6 +1733,11 @@ function App() {
     if (!targetId) return;
     const el = document.getElementById(targetId);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleUploadedDashboard = (dashboard) => {
+    loadUploadedDashboard(dashboard);
+    window.setTimeout(() => jumpTo("graph"), 120);
   };
 
   // 一键评审：依次跳到 §1 §2 §3 §4，再触发一次教师 diff 演示
@@ -1249,7 +1795,13 @@ function App() {
               <strong>资料源 / 压缩稽核</strong>
             </div>
           </div>
-          <TextbookPanel textbooks={data.textbooks} />
+          <UploadPanel
+            apiBase={apiBase}
+            setApiBase={setApiBase}
+            onDashboardLoaded={handleUploadedDashboard}
+            onUploaded={() => setActiveKey("graph")}
+          />
+          <TextbookPanel textbooks={data.textbooks} onViewGraph={setBookGraphTarget} />
           <CompressionPanel compression={data.compression} />
         </div>
         <div className="center-rail">
@@ -1281,8 +1833,18 @@ function App() {
               <strong>决策 / 引用问答</strong>
             </div>
           </div>
-          <DecisionsPanel decisions={decisions} onApplyFeedback={applyFeedback} />
-          <RagPanel rag={data.rag} seed={ragSeed} onSeedConsumed={() => setRagSeed(null)} />
+          <DecisionsPanel
+            decisions={decisions}
+            onApplyFeedback={applyFeedback}
+            feedbackBusy={feedbackBusy}
+            feedbackError={feedbackError}
+          />
+          <RagPanel
+            rag={data.rag}
+            apiBase={apiBase}
+            seed={ragSeed}
+            onSeedConsumed={() => setRagSeed(null)}
+          />
         </div>
       </div>
       <footer className="app-footer">
@@ -1291,6 +1853,12 @@ function App() {
           {stats.textbookCount} 本教材 · {stats.nodeCount} 节点 · {stats.decisionCount} 决策 · 压缩比 {stats.ratio}%
         </span>
       </footer>
+      <SingleTextbookGraphModal
+        open={Boolean(bookGraphTarget)}
+        textbook={bookGraphTarget}
+        apiBase={apiBase}
+        onClose={() => setBookGraphTarget(null)}
+      />
     </main>
   );
 }
