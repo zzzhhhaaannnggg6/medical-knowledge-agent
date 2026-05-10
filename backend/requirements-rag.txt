@@ -1,0 +1,5 @@
+# Optional: enable sentence-transformers embedding backend for RAG.
+# Install via: pip install -r backend/requirements-rag.txt
+# Or build Docker image with: docker build --build-arg RAG_EXTRAS=1 .
+sentence-transformers>=2.7.0
+faiss-cpu>=1.7.4

@@ -8,9 +8,20 @@ May 10 ZJU AI full-stack hackathon project. The current deliverable is a Vite/Re
 - Demo data: built in, so the deployed page remains usable without a backend
 - API mode: set `VITE_API_BASE` to a FastAPI service that exposes the stable `/api/dashboard` contract
 - Deployment target: GitHub Pages static frontend
-- Backend status: local FastAPI service is present and smoke-tested, but it is not yet required for public deployment
+- Backend status: local FastAPI service is present, Docker/Compose reproducible, and smoke-tested; it is not a public backend dependency
 - Public repository: <https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent>
 - Public demo: <https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/>
+
+## Judge Fast Path
+
+If you only have 30 seconds, open the public demo and click **一键评审**. The page walks through the four scoring questions in order:
+
+1. Why did the system merge or keep a knowledge point?
+2. Where is the textbook, chapter, page, and graph source?
+3. Is the integrated text under the 30% compression target?
+4. Does RAG QA return citations with source chunks?
+
+The public URL is intentionally a static GitHub Pages demo. To reproduce real upload, parsing, RAG indexing, and feedback writes, run the local FastAPI backend with Docker Compose or the Python command below.
 
 ## Main Features
 
@@ -18,8 +29,8 @@ May 10 ZJU AI full-stack hackathon project. The current deliverable is a Vite/Re
 - Knowledge graph: ECharts graph with concepts, source metadata, node details, category filters, and teaching-path highlights.
 - Integration audit: shows `merge / keep / remove` decisions, reasons, confidence, and simulated feedback changes.
 - Compression audit: records original text size, retained text size, compression ratio, and the 30% threshold.
-- Citation QA: RAG-style answer panel returns textbook, chapter, page, relevance, and source excerpt.
-- Local backend loop: FastAPI can reproduce parsing, graph construction, integration, compression, QA, and simulated feedback from local textbook PDFs.
+- Citation QA: local RAG returns textbook, chapter, page, relevance, source excerpt, expanded source chunk, and a fixed not-found response when evidence is weak.
+- Local backend loop: FastAPI can reproduce upload/parsing, graph construction, integration, compression, RAG indexing/QA, and simulated feedback from local textbook PDFs.
 
 ## Report Docs
 
@@ -44,8 +55,22 @@ Open:
 
 - Frontend: <http://localhost:5173>
 - Backend health: <http://localhost:8001/health>
+- Backend docs: <http://localhost:8001/docs>
 
 The backend image does not copy textbook PDFs. `docker-compose.yml` mounts `TEXTBOOK_DIR` read-only into the container at `/textbooks`, and generated backend state is kept in a Docker volume. If `TEXTBOOK_DIR` points to a missing folder, the backend demo loader will not find the default PDFs.
+
+Useful local checks after Compose starts:
+
+```bash
+curl -sS http://localhost:8001/health
+curl -sS -X POST http://localhost:8001/api/demo/load \
+  -H "Content-Type: application/json" \
+  -d '{"max_pages_per_document": 25}'
+curl -sS -X POST http://localhost:8001/api/rag/index
+curl -sS -X POST http://localhost:8001/api/rag/query \
+  -H "Content-Type: application/json" \
+  -d '{"question":"什么是细胞和感染？","top_k":5}'
+```
 
 ## Local Run
 
@@ -75,6 +100,13 @@ Smoke test:
 BASE_URL=http://127.0.0.1:8001 ./backend/scripts/smoke_test.sh
 ```
 
+RAG status endpoints:
+
+```bash
+curl -sS http://127.0.0.1:8001/api/rag/status
+curl -sS -X POST http://127.0.0.1:8001/api/rag/index
+```
+
 ## Production Build
 
 ```bash
@@ -100,9 +132,10 @@ If the backend is unavailable, the frontend falls back to the built-in demo data
 
 - The public GitHub Pages link is a static demo, not a public backend deployment.
 - The smoke test covers 2 textbook page windows, not the full 7-book corpus.
-- Current RAG uses lightweight hybrid retrieval: keyword/rule scoring plus character n-gram TF-IDF cosine. It is not a full embedding/vector-database pipeline.
+- Current semantic alignment uses a synonym table plus local character n-gram similarity. It is not a full LLM semantic-judgement pipeline.
+- Current RAG uses lightweight local retrieval: character n-gram TF-IDF plus BM25, with optional `sentence_transformers` embeddings if explicitly enabled. It is not a mandatory vector database or rerank pipeline.
+- RAG now downranks and strips obvious table-of-contents, page-number, and header noise before returning citations, but PDF extraction can still produce imperfect chunks.
 - Teacher feedback is simulated feedback for one integration decision, not a real teacher multi-turn conversation.
-- Some PDF excerpts still contain table-of-contents or header noise and need further cleaning.
 
 ## Submission Safety
 

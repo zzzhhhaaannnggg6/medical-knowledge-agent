@@ -202,6 +202,9 @@ const mockState = {
         pages: "6-13",
         relevance: 0.88,
         excerpt: "内环境理化性质保持相对稳定，是细胞正常活动的必要条件。",
+        chunkText:
+          "内环境理化性质保持相对稳定，是细胞正常活动的必要条件。稳态由神经调节、体液调节和自身调节共同维持，是理解后续病理学“代偿-失代偿”框架的前置概念。",
+        chunkId: "demo-chunk-homeostasis",
       },
       {
         textbook: "病理学 第9版",
@@ -209,8 +212,24 @@ const mockState = {
         pages: "19-22",
         relevance: 0.81,
         excerpt: "当刺激超过细胞适应能力时，可出现可逆或不可逆损伤。",
+        chunkText:
+          "当刺激超过细胞适应能力时，可出现可逆或不可逆损伤；若继续发展则进入坏死阶段。坏死常伴随炎症反应，是稳态被破坏后的典型病理改变。",
+        chunkId: "demo-chunk-injury",
       },
     ],
+    sourceChunks: [
+      "内环境理化性质保持相对稳定，是细胞正常活动的必要条件。稳态由神经调节、体液调节和自身调节共同维持，是理解后续病理学“代偿-失代偿”框架的前置概念。",
+      "当刺激超过细胞适应能力时，可出现可逆或不可逆损伤；若继续发展则进入坏死阶段。坏死常伴随炎症反应，是稳态被破坏后的典型病理改变。",
+    ],
+    indexStatus: {
+      indexedTextbooks: 2,
+      totalChunks: 42,
+      embeddingBackend: "char_ngram_tfidf+bm25",
+      chunkSize: 650,
+      chunkOverlap: 80,
+      noiseFilter: "toc_header_page_lines",
+      ready: true,
+    },
   },
 };
 
@@ -386,7 +405,10 @@ function ReviewerBar({ stats, onJump, activeKey }) {
       kicker: "§4 · 问答是否有引用",
       label: "RAG 引用证据",
       value: stats.citationCount,
-      hint: stats.citationCount > 0 ? "全部带教材 / 章节 / 页码" : "未返回教材引用",
+      hint:
+        stats.citationCount > 0
+          ? "教材 / 章节 / 页码 / 原文 chunk"
+          : "未返回教材引用",
       icon: Quote,
       tone: "rag",
     },
@@ -433,6 +455,47 @@ function PanelHeading({ tag, eyebrow, title, icon: Icon, meta, lede }) {
       </div>
       {lede && <p className="panel-lede">{lede}</p>}
     </>
+  );
+}
+
+function ReviewGuide({ source, stats, apiBase, onReview, reviewRunning }) {
+  const apiReady = source === "api";
+  return (
+    <section className="review-guide" aria-label="30 秒评审路线">
+      <div className="review-guide-copy">
+        <span className="guide-kicker">30 秒评审路线</span>
+        <h2>先点“一键评审”，按四问看作品。</h2>
+        <p>
+          评审顺序固定为：为什么合并 → 来源在哪 → 压缩是否 ≤30% → 问答是否有引用。
+          公网链接展示静态 Demo；上传、RAG 建库和教师反馈写回需要连接本地 FastAPI。
+        </p>
+      </div>
+      <button
+        type="button"
+        className={`guide-review-button ${reviewRunning ? "running" : ""}`}
+        onClick={onReview}
+        disabled={reviewRunning}
+      >
+        <Sparkles size={17} /> {reviewRunning ? "评审进行中..." : "一键评审"}
+      </button>
+      <div className="guide-facts" role="list" aria-label="评审关键状态">
+        <span role="listitem">四问入口已置顶</span>
+        <span role="listitem">{stats.decisionCount} 条整合决策</span>
+        <span role="listitem">压缩比 {stats.ratio}%</span>
+        <span role="listitem">{stats.citationCount} 条引用</span>
+        <span role="listitem" className={apiReady ? "api" : "demo"}>
+          {apiReady ? "真实 API 已连接" : "公网静态 Demo / 本地后端复现"}
+        </span>
+      </div>
+      <div className="guide-boundary">
+        <AlertCircle size={14} />
+        <span>
+          语义对齐当前是同义词表 + 本地字符 n-gram；RAG 默认是本地 TF-IDF/BM25，
+          可选 sentence-transformers，不把它包装成完整 LLM 判断。
+        </span>
+        <code>{apiBase || "http://127.0.0.1:8001"}</code>
+      </div>
+    </section>
   );
 }
 
@@ -1356,24 +1419,83 @@ function RagPanel({ rag, apiBase, seed, onSeedConsumed }) {
   const [answer, setAnswer] = useState(rag);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState("");
+  const [expandedChunks, setExpandedChunks] = useState({});
+  const [indexStatus, setIndexStatus] = useState(rag.indexStatus || null);
+  const [indexBusy, setIndexBusy] = useState(false);
 
   const normalizeRagResponse = (payload, question) => ({
     question: payload.question || question,
     answer: payload.answer || "当前知识库中未找到相关信息。",
-    citations: (payload.citations || []).map((item) => ({
+    citations: (payload.citations || []).map((item, idx) => ({
       textbook: item.textbook || item.document_title || "",
       chapter: item.chapter || item.chapter_title || "",
       pages: String(item.pages || item.page || ""),
-      relevance: item.relevance || 0,
+      relevance: item.relevance_score ?? item.relevance ?? 0,
       excerpt: item.excerpt || item.snippet || "",
+      chunkText:
+        (payload.source_chunks && payload.source_chunks[idx]) ||
+        item.chunkText ||
+        item.snippet ||
+        "",
+      chunkId: item.chunk_id || `${item.textbook || ""}-${item.page || idx}`,
     })),
+    sourceChunks: payload.source_chunks || payload.sourceChunks || [],
+    indexStatus: payload.indexStatus || null,
   });
+
+  const loadStatus = async () => {
+    const endpoint = normalizeApiBase(apiBase);
+    if (!endpoint) return;
+    try {
+      const res = await fetch(`${endpoint}/api/rag/status`);
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data = await res.json();
+      setIndexStatus({
+        indexedTextbooks: data.indexed_textbooks ?? data.indexedTextbooks ?? 0,
+        totalChunks: data.total_chunks ?? data.totalChunks ?? 0,
+        embeddingBackend:
+          data.embedding_backend || data.embeddingBackend || "local",
+        chunkSize: data.chunk_size || data.chunkSize || 650,
+        chunkOverlap: data.chunk_overlap || data.chunkOverlap || 80,
+        noiseFilter:
+          data.noise_filter || data.noiseFilter || "toc_header_page_lines",
+        ready: Boolean(data.ready),
+      });
+    } catch (err) {
+      // Fall back silently; the Demo banner below keeps reviewers informed.
+    }
+  };
+
+  const rebuildIndex = async () => {
+    const endpoint = normalizeApiBase(apiBase);
+    if (!endpoint) return;
+    setIndexBusy(true);
+    try {
+      const res = await fetch(`${endpoint}/api/rag/index`, { method: "POST" });
+      if (!res.ok) throw new Error(`index ${res.status}`);
+      await loadStatus();
+    } catch (err) {
+      setError("索引重建失败，检查后端 /api/rag/index");
+    } finally {
+      setIndexBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiBase]);
+
+  useEffect(() => {
+    if (rag.indexStatus) setIndexStatus(rag.indexStatus);
+  }, [rag.indexStatus]);
 
   const ask = async (raw) => {
     const q = (typeof raw === "string" ? raw : query).trim();
     if (!q) return;
     setQuery(q);
     setError("");
+    setExpandedChunks({});
 
     const endpoint = normalizeApiBase(apiBase);
     if (endpoint) {
@@ -1382,7 +1504,7 @@ function RagPanel({ rag, apiBase, seed, onSeedConsumed }) {
         const res = await fetch(`${endpoint}/api/rag/query`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: q, top_k: 3 }),
+          body: JSON.stringify({ question: q, top_k: 5 }),
         });
         if (!res.ok) throw new Error(`RAG ${res.status}`);
         const payload = await res.json();
@@ -1424,6 +1546,31 @@ function RagPanel({ rag, apiBase, seed, onSeedConsumed }) {
         meta={`${answer.citations.length} 条引用`}
         lede="提问后系统会给出答案和逐条教材证据——书脊色带定位来源、相关度条显示命中强度；未命中会明确回复“当前知识库中未找到相关信息”。"
       />
+      <div className="rag-index-bar" aria-label="RAG 索引状态">
+        <div className="rag-index-main">
+          <Layers3 size={14} />
+          {indexStatus ? (
+            <span>
+              已索引 <b>{indexStatus.indexedTextbooks}</b> 本教材 · 共{" "}
+              <b>{indexStatus.totalChunks}</b> 个知识块 · chunk {indexStatus.chunkSize}/{indexStatus.chunkOverlap} ·
+              后端 <code>{indexStatus.embeddingBackend}</code> · 噪声过滤{" "}
+              <code>{indexStatus.noiseFilter || "toc_header_page_lines"}</code>
+            </span>
+          ) : (
+            <span>索引状态未知（Demo 模式或后端离线）</span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="rag-index-rebuild"
+          onClick={rebuildIndex}
+          disabled={indexBusy}
+          title="触发 /api/rag/index 重新分块并建库"
+        >
+          <RefreshCw size={12} className={indexBusy ? "spin" : ""} />{" "}
+          {indexBusy ? "建库中..." : "重建索引"}
+        </button>
+      </div>
       <div className={`search-box ${asking ? "is-loading" : ""}`}>
         <Search size={17} />
         <input
@@ -1460,27 +1607,46 @@ function RagPanel({ rag, apiBase, seed, onSeedConsumed }) {
             <AlertCircle size={14} /> 未返回教材引用
           </div>
         ) : (
-          answer.citations.map((citation) => (
-            <article
-              key={`${citation.textbook}-${citation.pages}`}
-              style={{ "--source-accent": sourceColor(citation.textbook) }}
-            >
-              <span className="citation-spine" />
-              <div className="citation-head">
-                <strong>{citation.textbook}</strong>
-                <span className="relevance">
-                  相关度 {(citation.relevance * 100).toFixed(0)}%
-                </span>
-              </div>
-              <div className="citation-meta">
-                {citation.chapter} · 页 {citation.pages}
-              </div>
-              <div className="relevance-bar">
-                <div style={{ width: `${Math.round(citation.relevance * 100)}%` }} />
-              </div>
-              <p className="excerpt">{citation.excerpt}</p>
-            </article>
-          ))
+          answer.citations.map((citation, idx) => {
+            const key = citation.chunkId || `${citation.textbook}-${citation.pages}-${idx}`;
+            const expanded = Boolean(expandedChunks[key]);
+            const hasChunk = Boolean(citation.chunkText);
+            return (
+              <article
+                key={key}
+                style={{ "--source-accent": sourceColor(citation.textbook) }}
+              >
+                <span className="citation-spine" />
+                <div className="citation-head">
+                  <strong>{citation.textbook}</strong>
+                  <span className="relevance">
+                    相关度 {(citation.relevance * 100).toFixed(0)}%
+                  </span>
+                </div>
+                <div className="citation-meta">
+                  {citation.chapter} · 页 {citation.pages}
+                </div>
+                <div className="relevance-bar">
+                  <div style={{ width: `${Math.round(citation.relevance * 100)}%` }} />
+                </div>
+                <p className="excerpt">{citation.excerpt}</p>
+                {hasChunk && (
+                  <button
+                    type="button"
+                    className="chunk-toggle"
+                    onClick={() =>
+                      setExpandedChunks((prev) => ({ ...prev, [key]: !prev[key] }))
+                    }
+                  >
+                    {expanded ? "收起原文 chunk" : "展开原文 chunk"}
+                  </button>
+                )}
+                {hasChunk && expanded && (
+                  <pre className="chunk-body">{citation.chunkText}</pre>
+                )}
+              </article>
+            );
+          })
         )}
       </div>
     </section>
@@ -1522,7 +1688,7 @@ function Header({ source, loading, error, onReload, onReview, onPrint, reviewRun
           disabled={reviewRunning}
           title="一键带老师走完 §1-§4 评审"
         >
-          <Sparkles size={14} /> {reviewRunning ? "评审中…" : "评审模式"}
+          <Sparkles size={14} /> {reviewRunning ? "评审中..." : "一键评审"}
         </button>
         <button
           type="button"
@@ -1772,6 +1938,13 @@ function App() {
         onReload={reload}
         onReview={runReview}
         onPrint={runPrint}
+        reviewRunning={reviewRunning}
+      />
+      <ReviewGuide
+        source={source}
+        stats={stats}
+        apiBase={apiBase}
+        onReview={runReview}
         reviewRunning={reviewRunning}
       />
       <ReviewerBar stats={stats} onJump={jumpTo} activeKey={activeKey} />

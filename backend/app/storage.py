@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -39,5 +41,9 @@ class JsonStateStore:
 
     def save(self, state: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("w", encoding="utf-8") as target:
+        tmp_path = self.path.with_name(
+            f".{self.path.name}.{os.getpid()}.{threading.get_ident()}.tmp"
+        )
+        with tmp_path.open("w", encoding="utf-8") as target:
             json.dump(state, target, ensure_ascii=False, indent=2)
+        tmp_path.replace(self.path)

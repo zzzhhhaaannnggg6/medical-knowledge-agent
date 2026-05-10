@@ -27,8 +27,24 @@ Default API root for this branch: <http://127.0.0.1:8001>
 - `POST /api/documents`
 - `GET /api/state`
 - `GET /api/dashboard`
+- `GET /api/textbooks`
+- `GET /api/textbooks/{textbook_id}/graph`
+- `GET /api/rag/status`
+- `POST /api/rag/index`
 - `POST /api/rag/query`
 - `POST /api/feedback`
+
+## RAG Boundary
+
+The default retrieval path is intentionally local and reproducible:
+
+- chunk size: `RAG_CHUNK_SIZE=650`
+- overlap: `RAG_CHUNK_OVERLAP=80`
+- retrieval: character n-gram TF-IDF + BM25
+- optional embedding: set `EMBEDDING_BACKEND=sentence_transformers` and install `backend/requirements-rag.txt`
+- citation cleanup: obvious table-of-contents, page-number, and header lines are downranked or stripped before the API returns snippets/source chunks
+
+This should be described as lightweight local hybrid retrieval, not as a full vector database, rerank, or LLM semantic-judgement pipeline.
 
 ## Frontend Contract
 
@@ -43,6 +59,7 @@ It must return:
 - `decisions[]`: `id`, `type`, `nodes[]`, `result`, `reason`, `confidence`, `status`
 - `rag`: `question`, `answer`, `citations[]`
 - `rag.citations[]`: `textbook`, `chapter`, `pages`, `relevance`, `excerpt`
+- `rag.indexStatus`: `indexedTextbooks`, `totalChunks`, `embeddingBackend`, `chunkSize`, `chunkOverlap`, `noiseFilter`, `ready`
 
 Do not add backend features during final integration. Only fix this response shape if the frontend cannot read it.
 

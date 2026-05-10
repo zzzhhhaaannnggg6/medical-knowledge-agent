@@ -31,6 +31,8 @@
 | 2026-05-10 11:10 | Deploy | 部署路线切换为 GitHub Pages 静态前端 | 本机未安装 Vercel CLI，GitHub Pages 可直接用 Actions 发布 `frontend/dist` | 公网提交链接采用 GitHub Pages；本地 FastAPI 后端只作为真实闭环复现 | Active |
 | 2026-05-10 11:36 | Root | 自审结论：当前不是完美达标，提交口径改为“公网静态 Demo + 本地后端真实 MVP 闭环” | 赛题要求真实上传、图谱、跨教材整合、30% 压缩、RAG 引用、Agent 架构和教师多轮反馈；当前公网未覆盖全部真实交互 | 停止扩展大功能，优先回填链接、修文档诚实边界、补 Agent 创新点和提交复核 | Active |
 | 2026-05-10 13:02 | Docs/Report | 文档提交口径收束为 GitHub Pages 静态 Demo + 本地 FastAPI 真实闭环 | 仓库、Pages、backend smoke test 均已有可验证证据，但公网后端和向量化 RAG 未完成 | README、Agent 架构说明、整合报告、技术报告草稿、提交清单统一链接和边界说明；技术报告飞书链接保持可选 | Active |
+| 2026-05-10 14:3x | Deploy-Docker | 继续保留公网静态 Demo + 本地 FastAPI 复现路线，不临时追公网后端；前端用“一键评审”主动带评委走四问 | 用户明确指出公网主要仍是静态 Demo，真实后端能力需要本地复现；评委 30 秒内必须被主动引导 | README、前端首屏、RAG 状态和 Known Limits 同步诚实口径；减少误导性宣传，同时提高评审可读性 | Active |
+| 2026-05-10 14:3x | Deploy-Docker | RAG 与语义能力统一描述为本地轻量混合检索和同义词 + 字符 n-gram 对齐 | 当前实现不是完整 embedding / LLM 判断，RAG 引用偶有目录噪声 | 后端增加目录/页眉噪声降权和引用清洗；文档禁止把本地 n-gram 写成完整向量语义判断 | Active |
 
 ## 待决策
 

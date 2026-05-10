@@ -12,7 +12,12 @@ class DocumentLoadRequest(BaseModel):
 
 class RagQuery(BaseModel):
     question: str = Field(min_length=1, max_length=500)
-    top_k: int = Field(default=3, ge=1, le=8)
+    top_k: int = Field(default=5, ge=1, le=8)
+
+
+class RagIndexRequest(BaseModel):
+    paths: list[str] = Field(default_factory=list)
+    max_pages_per_document: int = Field(default=40, ge=1, le=120)
 
 
 FeedbackAction = Literal["keep", "remove", "merge", "split"]

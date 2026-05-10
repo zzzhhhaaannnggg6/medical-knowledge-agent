@@ -282,61 +282,40 @@ class KnowledgePipeline:
         }
 
 
-    def answer_question(self, question: str, top_k: int = 3) -> dict[str, Any]:
+    def answer_question(self, question: str, top_k: int = rag_pipeline.TOP_K_DEFAULT) -> dict[str, Any]:
         state = self.store.load()
-        chapters = state.get("_chapter_index") or state.get("chapters", [])
-        if not chapters:
-            return self._not_found(question)
-
-        retrieval_index = state.get("_retrieval_index") or {}
-        query_vec = self._query_vector(question, retrieval_index.get("idf", {}))
-        chapter_vecs = retrieval_index.get("chapters", {})
-
-        scored = []
-        for chapter in chapters:
-            text = chapter.get("text") or chapter.get("excerpt", "")
-            keyword_score = self._score(
-                question,
-                " ".join([chapter.get("title", ""), chapter.get("document_title", ""), text]),
-            )
-            cosine = self._sparse_dot(query_vec, chapter_vecs.get(chapter.get("id"), {}))
-            hybrid = keyword_score + 0.35 * cosine
-            if hybrid > 0:
-                scored.append((hybrid, chapter))
-
-        scored.sort(key=lambda item: item[0], reverse=True)
-        best = scored[:top_k]
-        if not best or best[0][0] < 0.018:
-            response = self._not_found(question)
+        index = self._ensure_rag_index(state)
+        if not index or not index.chunks:
+            response = rag_pipeline.not_found_response(question)
             state["citations"] = []
             self.store.save(state)
             return response
 
-        citations = []
-        answer_parts = []
-        for score, chapter in best:
-            snippet = self._best_snippet(question, chapter.get("text") or chapter.get("excerpt", ""))
-            citation = {
-                "document_title": chapter.get("document_title", ""),
-                "chapter_title": chapter.get("title", ""),
-                "page": chapter.get("start_page", 1),
-                "relevance": round(min(score, 1.0), 3),
-                "snippet": snippet,
-            }
-            citations.append(citation)
-            answer_parts.append(
-                f"《{citation['document_title']}》{citation['chapter_title']}第{citation['page']}页提示：{snippet}"
-            )
+        hits = index.retrieve(question, top_k=top_k)
+        # Score floor: require the top raw TF-IDF cosine to exceed a small
+        # threshold so off-topic queries that only share a few char n-grams
+        # still map to "未找到". tfidf_score is L2-normalised in [0, 1].
+        raw_peak = hits[0].tfidf_score if hits else 0.0
+        peak = hits[0].score if hits else 0.0
+        if not hits or peak < 0.05 or raw_peak < 0.10:
+            response = rag_pipeline.not_found_response(question)
+            state["citations"] = []
+            self.store.save(state)
+            return response
 
+        citations, source_chunks = rag_pipeline.format_hits_for_api(hits)
+        answer_text = rag_pipeline.generate_answer(question, hits)
         response = {
             "question": question,
             "found": True,
-            "answer": "；".join(answer_parts),
+            "answer": answer_text,
             "citations": citations,
+            "source_chunks": source_chunks,
         }
         state["citations"] = citations
         self.store.save(state)
         return response
+
 
     def dashboard_state(self) -> dict[str, Any]:
         state = self.store.load()
@@ -420,7 +399,8 @@ class KnowledgePipeline:
                 }
             )
 
-        rag = self.answer_question("什么是细胞和感染？", top_k=2) if documents else self._not_found("什么是细胞和感染？")
+        rag = self.answer_question("什么是细胞和感染？", top_k=3) if documents else self._not_found("什么是细胞和感染？")
+        rag_index_status = state.get("rag_index") or rag_pipeline.index_status(self._rag_index_cache)
         return {
             "textbooks": textbooks,
             "graph": {
@@ -444,16 +424,31 @@ class KnowledgePipeline:
                 "answer": rag.get("answer", ""),
                 "citations": [
                     {
-                        "textbook": item.get("document_title", ""),
-                        "chapter": item.get("chapter_title", ""),
+                        "textbook": item.get("document_title") or item.get("textbook", ""),
+                        "chapter": item.get("chapter_title") or item.get("chapter", ""),
                         "pages": str(item.get("page", "")),
-                        "relevance": item.get("relevance", 0),
+                        "relevance": item.get("relevance", item.get("relevance_score", 0)),
                         "excerpt": item.get("snippet", ""),
+                        "chunkText": (rag.get("source_chunks") or [None] * (idx + 1))[idx]
+                        if idx < len(rag.get("source_chunks") or [])
+                        else item.get("snippet", ""),
+                        "chunkId": item.get("chunk_id", ""),
                     }
-                    for item in rag.get("citations", [])
+                    for idx, item in enumerate(rag.get("citations", []))
                 ],
+                "sourceChunks": rag.get("source_chunks", []),
+                "indexStatus": {
+                    "indexedTextbooks": rag_index_status.get("indexed_textbooks", 0),
+                    "totalChunks": rag_index_status.get("total_chunks", 0),
+                    "embeddingBackend": rag_index_status.get("embedding_backend", rag_pipeline.EMBEDDING_BACKEND),
+                    "chunkSize": rag_index_status.get("chunk_size", rag_pipeline.CHUNK_SIZE),
+                    "chunkOverlap": rag_index_status.get("chunk_overlap", rag_pipeline.CHUNK_OVERLAP),
+                    "noiseFilter": rag_index_status.get("noise_filter", "toc_header_page_lines"),
+                    "ready": bool(rag_index_status.get("ready")),
+                },
             },
         }
+
 
     def list_textbooks(self) -> list[dict[str, Any]]:
         state = self.store.load()

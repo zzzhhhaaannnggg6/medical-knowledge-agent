@@ -33,6 +33,31 @@ NOT_FOUND_MESSAGE = "当前知识库中未找到相关信息"
 
 SENTENCE_RE = re.compile(r"[^。！？!?；;\n]{8,160}[。！？!?；;]?")
 WHITESPACE_RE = re.compile(r"\s+")
+TOC_MARK_RE = re.compile(r"(目\s*录|contents)", re.IGNORECASE)
+TOC_ENTRY_RE = re.compile(
+    r"(?:第[一二三四五六七八九十百千万0-9]+[章节篇][^。！？!?；;]{0,48}\s+\d{1,4}|"
+    r"\d+(?:\.\d+){1,3}\s+[^。！？!?；;]{2,48}\s+\d{1,4}|"
+    r"[\.·…]{3,}\s*\d{1,4})",
+    re.IGNORECASE,
+)
+PAGE_ONLY_RE = re.compile(r"^\s*[-—]?\s*\d{1,4}\s*[-—]?\s*$")
+MEDICAL_ANCHORS = (
+    "细胞",
+    "组织",
+    "器官",
+    "稳态",
+    "调节",
+    "损伤",
+    "炎症",
+    "免疫",
+    "感染",
+    "细菌",
+    "病毒",
+    "抗原",
+    "抗体",
+    "疾病",
+    "病原体",
+)
 
 
 @dataclass
@@ -70,10 +95,62 @@ class RetrievalHit:
     tfidf_score: float = 0.0
     bm25_score: float = 0.0
     embedding_score: float = 0.0
+    noise_score: float = 0.0
 
 
 def _clean(text: str) -> str:
     return WHITESPACE_RE.sub(" ", text or "").strip()
+
+
+def _noise_score(text: str) -> float:
+    """Estimate table-of-contents/header noise before returning a citation."""
+
+    raw = text or ""
+    if not raw.strip():
+        return 1.0
+
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    compact = _clean(raw)
+    toc_hits = len(TOC_ENTRY_RE.findall(raw)) + len(TOC_ENTRY_RE.findall(compact))
+    page_only = sum(1 for line in lines if PAGE_ONLY_RE.match(line))
+    short_lines = sum(1 for line in lines if len(line) <= 12)
+    anchors = sum(1 for term in MEDICAL_ANCHORS if term in raw)
+
+    score = 0.0
+    if TOC_MARK_RE.search(raw):
+        score += 0.34
+    if toc_hits:
+        score += min(0.46, toc_hits * 0.09)
+    if lines:
+        score += min(0.2, (page_only / len(lines)) * 0.5)
+        score += min(0.16, (short_lines / len(lines)) * 0.22)
+
+    if anchors >= 4:
+        score -= 0.22
+    elif anchors >= 2:
+        score -= 0.12
+    return max(0.0, min(1.0, score))
+
+
+def _strip_noise_lines(text: str) -> str:
+    """Remove obvious TOC/page-header lines while preserving citation text."""
+
+    raw = text or ""
+    lines = [line.strip() for line in raw.splitlines() if line.strip()]
+    if not lines:
+        return _clean(raw)
+
+    kept: list[str] = []
+    for line in lines:
+        if PAGE_ONLY_RE.match(line):
+            continue
+        if TOC_MARK_RE.search(line) and len(line) <= 24:
+            continue
+        if TOC_ENTRY_RE.search(line) and "。" not in line and len(line) <= 90:
+            continue
+        kept.append(line)
+    cleaned = _clean(" ".join(kept))
+    return cleaned or _clean(raw)
 
 
 def _char_ngrams(text: str, sizes: Iterable[int] = (1, 2, 3)) -> list[str]:
@@ -306,11 +383,15 @@ class RagIndex:
 
         hits: list[RetrievalHit] = []
         for idx, chunk in enumerate(self.chunks):
+            noise = _noise_score(chunk.text)
+            if noise >= 0.82:
+                continue
             combined = (
                 w_tfidf * tfidf_norm[idx]
                 + w_bm25 * bm25_norm[idx]
                 + (w_embed * embed_norm[idx] if use_embed else 0.0)
             )
+            combined *= max(0.35, 1.0 - noise * 0.5)
             if combined <= 0:
                 continue
             hits.append(
@@ -320,6 +401,7 @@ class RagIndex:
                     tfidf_score=tfidf_raw[idx],
                     bm25_score=bm25_raw[idx],
                     embedding_score=(embed_raw[idx] if use_embed else 0.0),
+                    noise_score=noise,
                 )
             )
         hits.sort(key=lambda hit: hit.score, reverse=True)
@@ -409,7 +491,7 @@ def _best_sentence(question: str, text: str) -> str:
 def _extractive_answer(question: str, hits: list[RetrievalHit]) -> str:
     parts: list[str] = []
     for hit in hits[:2]:
-        sentence = _best_sentence(question, hit.chunk.text)
+        sentence = _best_sentence(question, _strip_noise_lines(hit.chunk.text))
         if not sentence:
             continue
         parts.append(
@@ -427,8 +509,9 @@ def _extractive_answer(question: str, hits: list[RetrievalHit]) -> str:
 def _build_context_block(hits: list[RetrievalHit]) -> str:
     lines: list[str] = []
     for idx, hit in enumerate(hits, start=1):
+        text = _strip_noise_lines(hit.chunk.text)
         lines.append(
-            f"[{idx}] 《{hit.chunk.textbook}》{hit.chunk.chapter} 第{hit.chunk.page}页：{hit.chunk.text}"
+            f"[{idx}] 《{hit.chunk.textbook}》{hit.chunk.chapter} 第{hit.chunk.page}页：{text}"
         )
     return "\n".join(lines)
 
@@ -451,6 +534,7 @@ def format_hits_for_api(hits: list[RetrievalHit]) -> tuple[list[dict[str, Any]],
     peak = max((hit.score for hit in hits), default=1.0) or 1.0
     for hit in hits:
         chunk = hit.chunk
+        citation_text = _strip_noise_lines(chunk.text)
         citations.append(
             {
                 "textbook": chunk.textbook,
@@ -461,13 +545,14 @@ def format_hits_for_api(hits: list[RetrievalHit]) -> tuple[list[dict[str, Any]],
                 "document_title": chunk.textbook,
                 "chapter_title": chunk.chapter,
                 "relevance": round(min(1.0, hit.score / peak), 3),
-                "snippet": _clean(chunk.text)[:180],
+                "snippet": citation_text[:180],
                 "chunk_id": chunk.id,
                 "start_page": chunk.start_page,
                 "end_page": chunk.end_page,
+                "noise_score": round(hit.noise_score, 3),
             }
         )
-        source_chunks.append(chunk.text)
+        source_chunks.append(citation_text)
     return citations, source_chunks
 
 
@@ -489,6 +574,7 @@ def index_status(index: RagIndex | None) -> dict[str, Any]:
             "embedding_backend": EMBEDDING_BACKEND,
             "chunk_size": CHUNK_SIZE,
             "chunk_overlap": CHUNK_OVERLAP,
+            "noise_filter": "toc_header_page_lines",
             "ready": False,
         }
     textbooks = {chunk.textbook for chunk in index.chunks if chunk.textbook}
@@ -498,6 +584,7 @@ def index_status(index: RagIndex | None) -> dict[str, Any]:
         "embedding_backend": index.backend,
         "chunk_size": CHUNK_SIZE,
         "chunk_overlap": CHUNK_OVERLAP,
+        "noise_filter": "toc_header_page_lines",
         "ready": True,
     }
 

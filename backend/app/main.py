@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from .models import DocumentLoadRequest, FeedbackRequest, RagQuery
+from .models import DocumentLoadRequest, FeedbackRequest, RagIndexRequest, RagQuery
 from .pipeline import DEFAULT_DEMO_PATHS, KnowledgePipeline
 from .storage import JsonStateStore
 
@@ -126,6 +126,24 @@ def get_dashboard() -> dict[str, Any]:
 @app.post("/api/rag/query")
 def query_rag(query: RagQuery) -> dict[str, Any]:
     return pipeline.answer_question(query.question, top_k=query.top_k)
+
+
+@app.post("/api/rag/index")
+def build_rag_index(request: RagIndexRequest | None = None) -> dict[str, Any]:
+    payload = request or RagIndexRequest()
+    if payload.paths:
+        try:
+            pipeline.load_documents(payload.paths, max_pages_per_document=payload.max_pages_per_document)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return pipeline.build_rag_index()
+
+
+@app.get("/api/rag/status")
+def rag_status() -> dict[str, Any]:
+    return pipeline.rag_status()
 
 
 @app.post("/api/feedback")
