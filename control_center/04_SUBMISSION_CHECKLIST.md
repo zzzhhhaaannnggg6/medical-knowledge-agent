@@ -11,7 +11,7 @@
 
 ## GitHub 仓库
 
-- [x] 仓库是 Public：`https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent`（已推送，main @ `ce0dca1`）
+- [x] 仓库是 Public：`https://github.com/zzzhhhaaannnggg6/medical-knowledge-agent`（已推送，main @ `d649ac2`）
 - [x] README 有项目说明
 - [x] README 有本地运行方式
 - [x] README 有部署链接
@@ -21,7 +21,7 @@
 
 ## 部署链接
 
-- [x] GitHub Pages 工作流已成功：run 25618607225 初版、run 25619090600 上线 MQ-019 可读性修正、run 25619159653 记录最终部署提交
+- [x] GitHub Pages 工作流已成功：run 25618607225 初版、run 25619090600 上线 MQ-019 可读性修正、run 25619159653 记录部署提交、run 25620476724 发布 AI review snapshot
 - [x] 公网 HTTP 头验证：`https://zzzhhhaaannnggg6.github.io/medical-knowledge-agent/` 返回 HTTP 200（2026-05-10 13:02 CST，本机 curl 验证）
 - [x] 不是 localhost（部署链接为 github.io 子域）
 - [x] 无需登录即可访问部署页（HTTP 200）
@@ -40,6 +40,7 @@
 - 2026-05-10 11:22 CST：Deploy 接手 Agent 已创建 Public 仓库 `zzzhhhaaannnggg6/medical-knowledge-agent`，main 推送至 `0f51b02`，Pages workflow run 25618607225 conclusion=success。本机对 `*.github.io` 有 TLS 重置，需要用户在非受限网络/无痕窗口验证部署链接。
 - 2026-05-10 12:xx CST：接力 Root 已回填 README、整合报告、技术报告草稿中的 GitHub 仓库链接、GitHub Pages 链接和当前部署提交 `ce0dca1`；提交口径统一为“公网静态 Demo + 本地 FastAPI 后端真实 MVP 闭环”。
 - 2026-05-10 13:02 CST：Docs/Report 重开分支复核 `git log --oneline -5`，最新提交为 `ce0dca1`；复核 `gh run list --limit 5`，最新 Pages workflow `25619159653` 为 success；`curl -I -L` 部署链接返回 HTTP 200。
+- 2026-05-10 13:10 CST：AI review snapshot 已提交并推送，远端 `main` 为 `d649ac2`；最新 Pages workflow `25620476724` 为 success。
 
 ## 技术报告可选加分
 
@@ -51,7 +52,7 @@
 ## 中期 AI 初审
 
 - [x] 群通知已登记：私聊组织者发送姓名、GitHub 仓库链接、邮箱
-- [ ] 初审前 GitHub 快照已推送
+- [x] 初审前 GitHub 快照已推送：`d649ac2`
 - [ ] 用户已私聊发送姓名、仓库链接、邮箱
 - [ ] 收到邮箱评审报告
 - [ ] 根据 Top 5 建议选择高收益项修正
