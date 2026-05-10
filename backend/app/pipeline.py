@@ -13,6 +13,7 @@ from pypdf import PdfReader
 
 from .llm_extractor import RELATION_TYPES, extract_chapter, llm_configured
 from .models import FeedbackRequest
+from . import rag_pipeline
 from .storage import JsonStateStore
 
 TEXTBOOK_DIR = Path(os.environ.get("TEXTBOOK_DIR", "/Users/li/Desktop/黑客松/textbooks")).expanduser()
@@ -135,6 +136,8 @@ class PageText:
 class KnowledgePipeline:
     def __init__(self, store: JsonStateStore):
         self.store = store
+        self._rag_index_cache: rag_pipeline.RagIndex | None = None
+        self._rag_index_signature: str | None = None
 
     def load_documents(self, paths: list[str], max_pages_per_document: int = 40) -> dict[str, Any]:
         documents: list[dict[str, Any]] = []
@@ -154,6 +157,9 @@ class KnowledgePipeline:
         decisions = self._build_decisions(nodes)
         compression = self._build_compression(chapters, decisions, nodes)
         retrieval_index = self._build_retrieval_index(chapters)
+        rag_index, rag_chunks, rag_status = rag_pipeline.build_rag_state(chapters)
+        self._rag_index_cache = rag_index
+        self._rag_index_signature = self._rag_signature(chapters)
 
         state = {
             "documents": documents,
@@ -169,12 +175,112 @@ class KnowledgePipeline:
                 "max_pages_per_document": max_pages_per_document,
                 "method": "deterministic-rules-with-demo-fallback",
                 "retrieval": "keyword+char-bigram-tfidf-cosine",
+                "rag": {
+                    "chunk_size": rag_pipeline.CHUNK_SIZE,
+                    "chunk_overlap": rag_pipeline.CHUNK_OVERLAP,
+                    "top_k_default": rag_pipeline.TOP_K_DEFAULT,
+                    "embedding_backend": rag_index.backend,
+                },
             },
+            "rag_index": rag_status,
+            "rag_chunks": [chunk.as_dict() for chunk in rag_chunks],
             "_chapter_index": chapters,
             "_retrieval_index": retrieval_index,
         }
         self.store.save(state)
         return self._public_state(state)
+
+    # ------------------------------------------------------------------
+    # RAG helpers
+    # ------------------------------------------------------------------
+
+    def _rag_signature(self, chapters: list[dict[str, Any]]) -> str:
+        return "|".join(
+            f"{chapter.get('id','')}:{len(chapter.get('text') or chapter.get('excerpt',''))}"
+            for chapter in chapters
+        )
+
+    def _ensure_rag_index(self, state: dict[str, Any]) -> rag_pipeline.RagIndex | None:
+        chapters = state.get("_chapter_index")
+        if not chapters:
+            stored_chunks = state.get("rag_chunks") or []
+            if not stored_chunks:
+                return None
+            chunks = [
+                rag_pipeline.Chunk(
+                    id=item.get("id", ""),
+                    textbook=item.get("textbook", ""),
+                    textbook_id=item.get("textbook_id", ""),
+                    chapter=item.get("chapter", ""),
+                    chapter_id=item.get("chapter_id", ""),
+                    start_page=int(item.get("start_page", 1) or 1),
+                    end_page=int(item.get("end_page", item.get("start_page", 1)) or 1),
+                    page=int(item.get("page", item.get("start_page", 1)) or 1),
+                    text=item.get("text", ""),
+                    order=int(item.get("order", 0) or 0),
+                )
+                for item in stored_chunks
+            ]
+            signature = "stored:" + "|".join(chunk.id for chunk in chunks)
+            if self._rag_index_cache is None or self._rag_index_signature != signature:
+                self._rag_index_cache = rag_pipeline.RagIndex(chunks)
+                self._rag_index_signature = signature
+            return self._rag_index_cache
+
+        signature = self._rag_signature(chapters)
+        if self._rag_index_cache is None or self._rag_index_signature != signature:
+            index, _, status = rag_pipeline.build_rag_state(chapters)
+            self._rag_index_cache = index
+            self._rag_index_signature = signature
+            state["rag_index"] = status
+            state["rag_chunks"] = [chunk.as_dict() for chunk in index.chunks]
+            self.store.save(state)
+        return self._rag_index_cache
+
+    def build_rag_index(self) -> dict[str, Any]:
+        state = self.store.load()
+        chapters = state.get("_chapter_index") or []
+        if not chapters and all(path.exists() for path in DEFAULT_DEMO_PATHS):
+            state = self.load_documents(
+                [str(path) for path in DEFAULT_DEMO_PATHS], max_pages_per_document=25
+            )
+            chapters = state.get("_chapter_index") or []
+        if not chapters:
+            return {
+                "status": "empty",
+                "indexed_textbooks": 0,
+                "total_chunks": 0,
+                "embedding_backend": rag_pipeline.EMBEDDING_BACKEND,
+                "message": "尚未加载任何教材，请先上传或调用 /api/demo/load。",
+            }
+        index, chunks, status = rag_pipeline.build_rag_state(chapters)
+        self._rag_index_cache = index
+        self._rag_index_signature = self._rag_signature(chapters)
+        state["rag_index"] = status
+        state["rag_chunks"] = [chunk.as_dict() for chunk in chunks]
+        self.store.save(state)
+        return {"status": "ready", **status}
+
+    def rag_status(self) -> dict[str, Any]:
+        state = self.store.load()
+        stored = state.get("rag_index")
+        if stored and stored.get("ready"):
+            return {"status": "ready", **stored}
+        # Attempt lazy build if chapters exist.
+        if state.get("_chapter_index"):
+            index = self._ensure_rag_index(state)
+            if index:
+                return {"status": "ready", **rag_pipeline.index_status(index)}
+        return {
+            "status": "empty",
+            "indexed_textbooks": 0,
+            "total_chunks": 0,
+            "embedding_backend": rag_pipeline.EMBEDDING_BACKEND,
+            "chunk_size": rag_pipeline.CHUNK_SIZE,
+            "chunk_overlap": rag_pipeline.CHUNK_OVERLAP,
+            "ready": False,
+        }
+
 
     def answer_question(self, question: str, top_k: int = 3) -> dict[str, Any]:
         state = self.store.load()
