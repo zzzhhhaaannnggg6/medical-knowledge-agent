@@ -372,21 +372,24 @@ function ReviewerBar({ stats, onJump, activeKey }) {
   );
 }
 
-function PanelHeading({ tag, eyebrow, title, icon: Icon, meta }) {
+function PanelHeading({ tag, eyebrow, title, icon: Icon, meta, lede }) {
   return (
-    <div className="panel-heading">
-      {tag && <span className="heading-tag">§{tag}</span>}
-      {Icon && <Icon size={18} />}
-      <div className="heading-text">
-        {eyebrow && <small>{eyebrow}</small>}
-        <h2>{title}</h2>
+    <>
+      <div className="panel-heading">
+        {tag && <span className="heading-tag">§{tag}</span>}
+        {Icon && <Icon size={18} />}
+        <div className="heading-text">
+          {eyebrow && <small>{eyebrow}</small>}
+          <h2>{title}</h2>
+        </div>
+        {meta && <span className="heading-badge">{meta}</span>}
       </div>
-      {meta && <span className="heading-badge">{meta}</span>}
-    </div>
+      {lede && <p className="panel-lede">{lede}</p>}
+    </>
   );
 }
 
-function SectionHeading({ index, eyebrow, title, meta, actions }) {
+function SectionHeading({ index, eyebrow, title, meta, actions, lede }) {
   return (
     <div className="section-heading">
       <div className="heading-main">
@@ -394,6 +397,7 @@ function SectionHeading({ index, eyebrow, title, meta, actions }) {
         <div>
           <p>{eyebrow}</p>
           <h2>{title}</h2>
+          {lede && <span className="section-lede">{lede}</span>}
         </div>
       </div>
       <div className="heading-meta">
@@ -410,6 +414,8 @@ function GraphPanel({
   onSelectNode,
   categoryFilter,
   setCategoryFilter,
+  textbookFilter,
+  setTextbookFilter,
   showTeachingPath,
   setShowTeachingPath,
   integrityWarning,
@@ -438,7 +444,9 @@ function GraphPanel({
     chartRef.current = chart;
 
     const visibleNodes = graph.nodes.filter(
-      (node) => categoryFilter === "__all__" || node.category === categoryFilter,
+      (node) =>
+        (categoryFilter === "__all__" || node.category === categoryFilter) &&
+        (textbookFilter === "__all__" || node.textbook === textbookFilter),
     );
     const visibleIds = new Set(visibleNodes.map((node) => node.id));
     const echartsCategories = categories.map((name) => ({ name }));
@@ -563,7 +571,7 @@ function GraphPanel({
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [graph, selectedNodeId, onSelectNode, categoryFilter, categories, showTeachingPath]);
+  }, [graph, selectedNodeId, onSelectNode, categoryFilter, textbookFilter, categories, showTeachingPath]);
 
   const selectedColor = sourceColor(selectedNode.textbook);
   const isTeachingPath = selectedNode.category === "整合节点" || selectedNode.textbook === "跨教材整合";
@@ -574,6 +582,7 @@ function GraphPanel({
         index="2"
         eyebrow="Knowledge Graph"
         title="跨教材知识图谱"
+        lede="节点颜色代表来源教材，节点大小代表跨书频次；点击节点可查看定义、章节、页码。"
         meta={`${graph.nodes.length} 节点 · ${graph.edges.length} 关系`}
         actions={
           <div className="filter-row">
@@ -605,13 +614,32 @@ function GraphPanel({
           </div>
         }
       />
-      <div className="source-legend">
-        {textbooks.map((tb) => (
-          <span key={tb} className="legend-item">
-            <i style={{ background: sourceColor(tb) }} />
-            {tb}
-          </span>
-        ))}
+      <div className="source-legend" role="group" aria-label="按教材过滤">
+        <button
+          type="button"
+          className={`legend-item ${textbookFilter === "__all__" ? "active" : ""}`}
+          onClick={() => setTextbookFilter("__all__")}
+          aria-pressed={textbookFilter === "__all__"}
+        >
+          <i className="swatch all" />
+          全部教材
+        </button>
+        {textbooks.map((tb) => {
+          const active = textbookFilter === tb;
+          return (
+            <button
+              type="button"
+              key={tb}
+              className={`legend-item ${active ? "active" : ""}`}
+              onClick={() => setTextbookFilter(active ? "__all__" : tb)}
+              aria-pressed={active}
+              style={{ "--swatch": sourceColor(tb) }}
+            >
+              <i className="swatch" style={{ background: sourceColor(tb) }} />
+              {tb}
+            </button>
+          );
+        })}
       </div>
       {integrityWarning && (
         <div className="integrity-alarm" role="alert">
@@ -677,6 +705,7 @@ function TextbookPanel({ textbooks }) {
         title="教材资料源"
         icon={BookOpen}
         meta={`${parsedCount}/${textbooks.length} 已解析`}
+        lede="每一本教材以书脊色带区分，章节卡列出页码与字符数；所有知识点、引用和图谱颜色都从这里开始回溯。"
       />
       <div className="textbook-list">
         {textbooks.map((book) => (
@@ -728,6 +757,7 @@ function CompressionPanel({ compression }) {
         title="字数稽核与压缩比"
         icon={Scale}
         meta={passed ? "达标" : "未达标"}
+        lede="原始正文与整合后字数的刻度尺；红色刻度标记 30% 硬线，超过即视为压缩失败，并保留护栏原则。"
       />
       <div className="ratio-card">
         <div>
@@ -791,6 +821,7 @@ function DecisionsPanel({ decisions, onApplyFeedback }) {
         title="整合决策评审"
         icon={SlidersHorizontal}
         meta={`${decisions.length} 条`}
+        lede="每一条决策都有印章式标识（合并 / 保留 / 删除 / 拆分）、受影响节点、理由与置信度；教师可在下方批注区改判并立即生效。"
       />
       <div className="decision-list">
         {decisions.map((decision) => (
@@ -899,6 +930,7 @@ function RagPanel({ rag, seed, onSeedConsumed }) {
         title="引用问答"
         icon={MessageSquareText}
         meta={`${answer.citations.length} 条引用`}
+        lede="提问后系统会给出答案和逐条教材证据——书脊色带定位来源、相关度条显示命中强度；未命中会明确回复“当前知识库中未找到相关信息”。"
       />
       <div className="search-box">
         <Search size={17} />
@@ -1024,6 +1056,7 @@ function App() {
   const [selectedNodeId, setSelectedNodeId] = useState(data.graph.nodes[0]?.id || "");
   const [decisions, setDecisions] = useState(data.decisions);
   const [categoryFilter, setCategoryFilter] = useState("__all__");
+  const [textbookFilter, setTextbookFilter] = useState("__all__");
   const [feedbackDiff, setFeedbackDiff] = useState(null);
   const [showTeachingPath, setShowTeachingPath] = useState(true);
   const [reviewRunning, setReviewRunning] = useState(false);
@@ -1233,6 +1266,8 @@ function App() {
             onSelectNode={setSelectedNodeId}
             categoryFilter={categoryFilter}
             setCategoryFilter={setCategoryFilter}
+            textbookFilter={textbookFilter}
+            setTextbookFilter={setTextbookFilter}
             showTeachingPath={showTeachingPath}
             setShowTeachingPath={setShowTeachingPath}
             integrityWarning={integrityWarning}
