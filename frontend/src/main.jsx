@@ -1195,7 +1195,7 @@ function App() {
         onPrint={runPrint}
         reviewRunning={reviewRunning}
       />
-      <ReviewerBar stats={stats} onJump={jumpTo} />
+      <ReviewerBar stats={stats} onJump={jumpTo} activeKey={activeKey} />
       {feedbackDiff && (
         <div className="diff-toast" role="status">
           <span className={`stamp stamp-${feedbackDiff.to}`}>
